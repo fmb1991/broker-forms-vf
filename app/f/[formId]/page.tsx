@@ -1,123 +1,287 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { supabase } from "../../../lib/supabaseClient";
-import { FormShell, Payload } from "../../../components/forms/FormShell";
+import type React from "react"
 
-/**
- * Page that loads data via RPC and passes it to the design layer (FormShell + QuestionCard).
- * All data calls stay here so V0 can freely style the components.
- */
+import { useEffect, useRef, useState } from "react"
+import { supabase } from "../../../lib/supabaseClient"
+import { FormShell } from "../../../components/forms/FormShell"
+import { QuestionRenderer } from "../../../components/forms/QuestionRenderer"
+
+/** ---------- Types ---------- */
+type TableSchemaField = {
+  key: string
+  type: "text" | "boolean" | "number" | "date" | "currency"
+  label?: Record<string, string>
+  required?: boolean
+}
+
+type Option = { value: string; label: string; order: number }
+type TableRow = { row_index: number; row: Record<string, any> }
+
+type Question = {
+  code: string
+  type: "boolean" | "single_select" | "multi_select" | "date" | "currency" | "text" | "number" | "attachment" | "table"
+  label: string
+  help?: string
+  config?: {
+    currency?: string
+    decimals?: number
+    table_schema?: TableSchemaField[]
+    max_mb?: number
+    allowed?: string[]
+  }
+  options?: Option[]
+  answer: any
+  table_rows?: TableRow[]
+}
+
+type Payload = {
+  form: { id: string; status: "draft" | "submitted"; company?: string; contact?: any }
+  questions: Question[]
+}
+
+/** ---------- Debounced saving helper ---------- */
+const SAVE_DEBOUNCE_MS = 600
+function useDebouncedSaves() {
+  const timers = useRef<Record<string, any>>({})
+  async function saveDebounced(code: string, value: any, saver: (code: string, value: any) => Promise<void>) {
+    if (timers.current[code]) clearTimeout(timers.current[code])
+    timers.current[code] = setTimeout(async () => {
+      try {
+        await saver(code, value)
+      } catch (e) {
+        console.error(e)
+      }
+    }, SAVE_DEBOUNCE_MS)
+  }
+  return { saveDebounced }
+}
+
+/** ---------- Page ---------- */
 export default function FormPage({
   params,
   searchParams,
 }: {
-  params: { formId: string };
-  searchParams: Record<string, string | string[] | undefined>;
+  params: { formId: string }
+  searchParams: Record<string, string | string[] | undefined>
 }) {
-  const lang = ((searchParams?.lang as string) ?? "pt-BR").toString();
-  const token = ((searchParams?.t as string) ?? "").toString();
+  // URL params
+  const lang = ((searchParams?.lang as string) ?? "pt-BR").toString()
+  const token = ((searchParams?.t as string) ?? "").toString()
 
-  const [payload, setPayload] = useState<Payload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // State
+  const [payload, setPayload] = useState<Payload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { saveDebounced } = useDebouncedSaves()
 
-  // Load
+  // -------- LOAD --------
   useEffect(() => {
     if (!token) {
-      setError("Link inválido: faltou o token (?t=...)");
-      setLoading(false);
-      return;
+      setError("Link inválido: faltou o token (?t=...)")
+      setLoading(false)
+      return
     }
-    (async () => {
-      setLoading(true);
+    ;(async () => {
+      setLoading(true)
       const { data, error } = await supabase.rpc("sec_get_form_payload_v3", {
         p_lang: lang, // lang FIRST
         p_token: token, // token SECOND
-      });
-      if (error) setError(error.message);
-      else setPayload(data as Payload);
-      setLoading(false);
-    })();
-  }, [lang, token]);
+      })
+      if (error) setError(error.message)
+      else setPayload(data as Payload)
+      setLoading(false)
+    })()
+  }, [lang, token])
 
-  // Mutate local state helper
+  // -------- HELPERS (local mutations) --------
   function mutateAnswerLocal(code: string, next: any) {
     setPayload((prev) => {
-      if (!prev) return prev;
-      const i = prev.questions.findIndex((q) => q.code === code);
-      if (i === -1) return prev;
-      const copy = structuredClone(prev);
-      copy.questions[i].answer = next;
-      return copy;
-    });
-  }
-  function upsertRowLocal(code: string, rowIndex: number, row: Record<string, any>) {
-    setPayload((prev) => {
-      if (!prev) return prev;
-      const i = prev.questions.findIndex((q) => q.code === code);
-      if (i === -1) return prev;
-      const copy = structuredClone(prev);
-      const q = copy.questions[i];
-      const rows = Array.isArray(q.table_rows) ? q.table_rows.slice() : [];
-      const idx = rows.findIndex((r) => r.row_index === rowIndex);
-      if (idx === -1) rows.push({ row_index: rowIndex, row });
-      else rows[idx] = { row_index: rowIndex, row };
-      q.table_rows = rows;
-      return copy;
-    });
+      if (!prev) return prev
+      const i = prev.questions.findIndex((q) => q.code === code)
+      if (i === -1) return prev
+      const copy = structuredClone(prev)
+      copy.questions[i].answer = next
+      return copy
+    })
   }
 
-  // Save RPCs
-  async function onSaveAnswer(code: string, value: any) {
+  function upsertRowLocal(code: string, rowIndex: number, row: Record<string, any>) {
+    setPayload((prev) => {
+      if (!prev) return prev
+      const i = prev.questions.findIndex((q) => q.code === code)
+      if (i === -1) return prev
+      const copy = structuredClone(prev)
+      const q = copy.questions[i]
+      const rows = Array.isArray(q.table_rows) ? q.table_rows.slice() : []
+      const idx = rows.findIndex((r) => r.row_index === rowIndex)
+      if (idx === -1) rows.push({ row_index: rowIndex, row })
+      else rows[idx] = { row_index: rowIndex, row }
+      q.table_rows = rows
+      return copy
+    })
+  }
+
+  // -------- SAVE RPCs --------
+  async function saveAnswer(code: string, value: any) {
     const { error } = await supabase.rpc("sec_upsert_answer_v3", {
       p_token: token,
       p_question_code: code,
       p_value_json: value,
-    });
-    if (error) throw error;
-    mutateAnswerLocal(code, value);
+    })
+    if (error) throw error
   }
 
-  async function onSaveTableRow(code: string, rowIndex: number, row: any) {
+  async function saveTableRow(code: string, rowIndex: number, row: any) {
     const { error } = await supabase.rpc("sec_upsert_table_row_v3", {
       p_token: token,
       p_question_code: code,
       p_row_index: rowIndex,
       p_row_json: row,
-    });
-    if (error) throw error;
-    upsertRowLocal(code, rowIndex, row);
+    })
+    if (error) throw error
   }
 
-  async function onSubmitForm() {
-    setSubmitting(true);
-    const { data, error } = await supabase.rpc("sec_submit_form_v3", { p_token: token });
-    setSubmitting(false);
-    if (error) return alert("Erro: " + error.message);
+  async function submitForm() {
+    setSubmitting(true)
+    const { data, error } = await supabase.rpc("sec_submit_form_v3", { p_token: token })
+    setSubmitting(false)
+    if (error) return alert("Erro: " + error.message)
     if (data?.ok) {
-      alert("Formulário enviado!");
-      const res = await supabase.rpc("sec_get_form_payload_v3", { p_lang: lang, p_token: token });
-      if (!res.error) setPayload(res.data as Payload);
+      alert("Formulário enviado!")
+      const res = await supabase.rpc("sec_get_form_payload_v3", { p_lang: lang, p_token: token })
+      if (!res.error) setPayload(res.data as Payload)
     } else {
-      alert("Faltam campos obrigatórios: " + (data?.missing_required || []).join(", "));
+      alert("Faltam campos obrigatórios: " + (data?.missing_required || []).join(", "))
     }
   }
 
-  // Outlet
-  if (loading) return <div className="p-6">Carregando…</div>;
-  if (error) return <div className="p-6 text-red-600">Erro: {error}</div>;
-  if (!payload) return <div className="p-6">Sem dados.</div>;
+  async function handleAddTableRow(code: string) {
+    const question = payload?.questions.find((q) => q.code === code)
+    if (!question) return
+
+    const rows = question.table_rows || []
+    const nextIndex = rows.length ? Math.max(...rows.map((r) => r.row_index)) + 1 : 0
+    const empty: Record<string, any> = {}
+
+    try {
+      await saveTableRow(code, nextIndex, empty)
+      upsertRowLocal(code, nextIndex, empty)
+    } catch (error) {
+      console.error("Error adding table row:", error)
+    }
+  }
+
+  async function handleTableRowChange(code: string, rowIndex: number, row: Record<string, any>) {
+    try {
+      upsertRowLocal(code, rowIndex, row)
+      await saveTableRow(code, rowIndex, row)
+    } catch (error) {
+      console.error("Error updating table row:", error)
+    }
+  }
+
+  /** Optimistic save for simple field types */
+  function handleFieldChange(code: string, value: any) {
+    mutateAnswerLocal(code, value) // instant UI
+    saveDebounced(code, value, saveAnswer) // save after pause
+  }
+
+  // -------- OUTLET --------
+  if (loading) return <div className="p-6">Carregando…</div>
+  if (error) return <div className="p-6 text-red-600">Erro: {error}</div>
+  if (!payload) return <div className="p-6">Sem dados.</div>
+
+  const locked = payload.form.status === "submitted"
 
   return (
     <FormShell
-      payload={payload}
-      lang={lang}
+      company={payload.form.company}
+      status={payload.form.status}
+      onSubmit={submitForm}
       submitting={submitting}
-      onSaveAnswer={onSaveAnswer}
-      onSaveTableRow={onSaveTableRow}
-      onSubmitForm={onSubmitForm}
-    />
-  );
+    >
+      {payload.questions.map((question, index) => (
+        <QuestionRenderer
+          key={question.code}
+          question={question}
+          questionNumber={index + 1}
+          locked={locked}
+          onAnswerChange={handleFieldChange}
+          onTableRowChange={handleTableRowChange}
+          onAddTableRow={handleAddTableRow}
+          token={token}
+        />
+      ))}
+    </FormShell>
+  )
+}
+
+/** ---------- Attachment widget (signed upload) ---------- */
+function AttachmentWidget({
+  code,
+  token,
+  disabled,
+  onSaved,
+}: {
+  code: string
+  token: string
+  disabled?: boolean
+  onSaved: (meta: any) => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBusy(true)
+    setErr(null)
+    try {
+      // ask API to create a signed upload URL
+      const r = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token,
+          questionCode: code,
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || "Falha ao criar URL de upload")
+
+      // upload the file directly to Supabase Storage
+      const put = await fetch(j.uploadUrl, {
+        method: "PUT",
+        headers: { "content-type": j.contentType },
+        body: file,
+      })
+      if (!put.ok) throw new Error("Falha no upload")
+
+      // save answer with file metadata
+      await onSaved({
+        bucket: j.bucket,
+        objectKey: j.objectKey,
+        filename: file.name,
+        size: file.size,
+        contentType: file.type || "application/octet-stream",
+      })
+      alert("Arquivo enviado com sucesso.")
+    } catch (e: any) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+      e.target.value = "" // reset input
+    }
+  }
+
+  return (
+    <div>
+      <input type="file" disabled={disabled || busy} onChange={handleSelect} />
+      {err && <div className="text-red-600 text-sm mt-2">Erro: {err}</div>}
+    </div>
+  )
 }

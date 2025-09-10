@@ -1,22 +1,8 @@
-/* app/globals.css */
-
-/* 1) Load Tailwind v4 */
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* 2) Tell Tailwind where to scan for class names (very important in v4)  */
-@source "./**/*.{ts,tsx,js,jsx}";
-@source "../components/**/*.{ts,tsx,js,jsx}";
-@source "../lib/**/*.{ts,tsx,js,jsx}";
-@source "../pages/**/*.{ts,tsx,js,jsx}";
-@source "../**/*.mdx";
-
-/* 3) Use the correct animation plugin used by V0 / shadcn */
-@plugin "tailwindcss-animate";
-
-/* Optional: keep a dark variant helper */
 @custom-variant dark (&:is(.dark *));
 
-/* ------------------ Design tokens (yours, kept) ------------------ */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -24,8 +10,7 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-
-  /* Forters theme */
+  /* Updated primary colors to use Forters teal/blue theme */
   --primary: oklch(0.45 0.15 200);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.95 0.02 200);
@@ -35,25 +20,21 @@
   --accent: oklch(0.92 0.05 200);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0); /* better contrast */
-
+  --destructive-foreground: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-
+  /* Added Forters orange accent color */
   --forters-orange: oklch(0.7 0.15 45);
   --forters-navy: oklch(0.2 0.05 240);
   --forters-teal: oklch(0.45 0.15 200);
   --forters-light-blue: oklch(0.92 0.05 200);
-
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-
   --radius: 0.625rem;
-
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -71,7 +52,6 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.145 0 0);
   --popover-foreground: oklch(0.985 0 0);
-
   --primary: oklch(0.55 0.15 200);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
@@ -81,18 +61,15 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.985 0 0);
-
+  --destructive-foreground: oklch(0.637 0.237 25.331);
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
-
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -103,11 +80,10 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-/* Map your font variables created in layout.tsx */
 @theme inline {
+  /* Updated font variables to match new Inter and JetBrains Mono fonts */
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
-
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -127,23 +103,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-
+  /* Added Forters custom colors to theme */
   --color-forters-orange: var(--forters-orange);
   --color-forters-navy: var(--forters-navy);
   --color-forters-teal: var(--forters-teal);
   --color-forters-light-blue: var(--forters-light-blue);
-
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -154,9 +127,11 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Base layer to apply colors/borders globally */
 @layer base {
-  * { @apply border-border outline-ring/50; }
-  body { @apply bg-background text-foreground; }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
-

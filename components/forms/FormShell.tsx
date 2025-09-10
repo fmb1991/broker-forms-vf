@@ -1,93 +1,67 @@
-"use client";
+"use client"
 
-import { Question, QuestionCard } from "./QuestionRenderer";
+import type React from "react"
 
-export type Payload = {
-  form: { id: string; status: "draft" | "submitted"; company?: string; contact?: any };
-  questions: Question[];
-};
+import Image from "next/image"
+import { Button } from "@/components/ui/button"
+import { CheckCircle } from "lucide-react"
 
-function percentComplete(questions: Question[]) {
-  if (!questions?.length) return 0;
-  const isAnswered = (q: Question) => {
-    if (q.type === "multi_select") return Array.isArray(q.answer) && q.answer.length > 0;
-    if (q.type === "table") return Array.isArray(q.table_rows) && q.table_rows.length > 0;
-    return q.answer !== null && q.answer !== undefined && q.answer !== "";
-  };
-  const done = questions.filter(isAnswered).length;
-  return Math.round((done / questions.length) * 100);
+type FormShellProps = {
+  company?: string
+  status: "draft" | "submitted"
+  children: React.ReactNode
+  onSubmit: () => void
+  submitting: boolean
 }
 
-export function FormShell({
-  payload,
-  lang,
-  submitting,
-  onSaveAnswer,
-  onSaveTableRow,
-  onSubmitForm,
-}: {
-  payload: Payload;
-  lang: string;
-  submitting: boolean;
-  onSaveAnswer: (code: string, value: any) => Promise<void>;
-  onSaveTableRow: (code: string, rowIndex: number, row: any) => Promise<void>;
-  onSubmitForm: () => Promise<void>;
-}) {
-  const locked = payload.form.status === "submitted";
-  const pct = percentComplete(payload.questions);
+export function FormShell({ company, status, children, onSubmit, submitting }: FormShellProps) {
+  const locked = status === "submitted"
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold">Questionário</h1>
-        <div className="text-muted-foreground">
-          Empresa: {payload.form.company || "—"}{" "}
-          {locked && <span className="text-emerald-600 font-semibold">— Enviado</span>}
-        </div>
-
-        {/* progress */}
-        <div className="mt-2">
-          <div className="h-2 rounded bg-muted overflow-hidden">
-            <div
-              className="h-2 bg-primary transition-all"
-              style={{ width: `${pct}%` }}
-              aria-label={`Progresso ${pct}%`}
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      {/* Header with logo */}
+      <div className="w-full bg-white shadow-sm border-b border-slate-200">
+        <div className="container mx-auto px-4 py-6 max-w-4xl">
+          <div className="flex justify-center">
+            <Image src="/forters-logo.jpeg" alt="Forters" width={200} height={80} className="h-16 w-auto" />
           </div>
-          <div className="text-xs text-muted-foreground mt-1">{pct}% completo</div>
         </div>
-      </header>
-
-      {/* Questions */}
-      <div className="space-y-4">
-        {payload.questions.map((q) => (
-          <QuestionCard
-            key={q.code}
-            q={q}
-            lang={lang}
-            locked={locked}
-            onSaveAnswer={onSaveAnswer}
-            onSaveTableRow={onSaveTableRow}
-          />
-        ))}
       </div>
 
-      {/* Sticky Submit Bar */}
-      <div className="sticky bottom-0 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t mt-4">
-        <div className="max-w-4xl mx-auto p-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            {locked ? "Formulário já enviado." : "Revise suas respostas antes de enviar."}
+      {/* Main content */}
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">Questionário de Seguros</h1>
+          <div className="flex items-center justify-center gap-2 text-slate-600">
+            <span>Empresa: {company || "Não informada"}</span>
+            {locked && (
+              <div className="flex items-center gap-1 text-green-600 font-medium">
+                <CheckCircle className="h-4 w-4" />
+                <span>Enviado</span>
+              </div>
+            )}
           </div>
-          <button
-            className="px-4 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50"
-            onClick={onSubmitForm}
-            disabled={locked || submitting}
-          >
-            {locked ? "Enviado" : submitting ? "Enviando…" : "Enviar"}
-          </button>
+        </div>
+
+        {/* Questions container */}
+        <div className="space-y-6 mb-24">{children}</div>
+
+        {/* Sticky submit bar */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-lg">
+          <div className="container mx-auto px-4 py-4 max-w-4xl">
+            <div className="flex justify-end">
+              <Button
+                onClick={onSubmit}
+                disabled={submitting || locked}
+                size="lg"
+                className="bg-orange-600 hover:bg-orange-700 text-white min-w-32"
+              >
+                {locked ? "Enviado" : submitting ? "Enviando..." : "Enviar Questionário"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
