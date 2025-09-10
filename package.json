@@ -9,6 +9,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@radix-ui/react-label": "^2.0.2",
+    "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
     "@supabase/supabase-js": "latest",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -26,7 +29,7 @@
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.5",
     "postcss": "^8.5",
-    "tailwindcss": "4.1.13",
+    "tailwindcss": "^4.1.9",
     "typescript": "^5"
   }
 }
