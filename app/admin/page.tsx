@@ -1,3 +1,7 @@
+export default function AdminPage() {
+  return <div>Admin OK</div>; // simple smoke test
+}
+
 "use client";
 
 import { useState } from "react";
