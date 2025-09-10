@@ -1,7 +1,3 @@
-export default function AdminPage() {
-  return <div>Admin OK</div>; // simple smoke test
-}
-
 "use client";
 
 import { useState } from "react";
@@ -24,7 +20,7 @@ export default function AdminPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [lang, setLang] = useState("pt-BR");
-  const [ttl, setTtl] = useState(60 * 24 * 30);
+  const [ttl, setTtl] = useState(60 * 24 * 30); // 30 days
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ form_id?: string; token?: string } | null>(null);
@@ -33,11 +29,13 @@ export default function AdminPage() {
     setError(null);
     setTemplates([]);
     setSelectedSlug("");
+
     const res = await fetch("/api/admin/templates", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ adminSecret }),
     });
+
     const json = await res.json();
     if (!res.ok) {
       setError(json.error || "Erro ao listar templates");
@@ -51,6 +49,7 @@ export default function AdminPage() {
     setCreating(true);
     setError(null);
     setResult(null);
+
     const res = await fetch("/api/admin/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -62,6 +61,7 @@ export default function AdminPage() {
         ttlMinutes: ttl,
       }),
     });
+
     const json = await res.json();
     setCreating(false);
     if (!res.ok) {
@@ -71,9 +71,10 @@ export default function AdminPage() {
     setResult(json);
   }
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
   const formUrl =
     result?.form_id && result?.token
-      ? `${typeof window !== "undefined" ? window.location.origin : ""}/f/${result.form_id}?lang=${lang}&t=${result.token}`
+      ? `${origin}/f/${result.form_id}?lang=${lang}&t=${result.token}`
       : "";
 
   async function copyUrl() {
@@ -210,10 +211,14 @@ export default function AdminPage() {
 
         {formUrl && (
           <div className="border rounded p-3">
-            <div><b>URL:</b></div>
+            <div>
+              <b>URL:</b>
+            </div>
             <div style={{ wordBreak: "break-all", marginTop: 6 }}>{formUrl}</div>
             <div style={{ marginTop: 8 }}>
-              <button className="px-3 py-2 rounded border" onClick={copyUrl}>Copiar URL</button>
+              <button className="px-3 py-2 rounded border" onClick={copyUrl}>
+                Copiar URL
+              </button>
             </div>
           </div>
         )}
@@ -221,4 +226,3 @@ export default function AdminPage() {
     </main>
   );
 }
-
