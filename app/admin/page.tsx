@@ -217,3 +217,9 @@ export default function AdminPage() {
     </main>
   );
 }
+
+// app/admin/page.tsx
+export default function Admin() {
+  return <main style={{padding:24}}>Admin placeholder</main>;
+}
+
