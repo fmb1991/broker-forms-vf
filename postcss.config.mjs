@@ -1,8 +1,6 @@
-/** @type {import('postcss-load-config').Config} */
-const config = {
+// postcss.config.mjs
+export default {
   plugins: {
-    '@tailwindcss/postcss': {},
+    '@tailwindcss/postcss': {},   // <-- This runs Tailwind v4 in Vercel builds
   },
-}
-
-export default config
+};
