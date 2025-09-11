@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type React from "react";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
