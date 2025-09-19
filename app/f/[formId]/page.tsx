@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { FormShell } from "../../../components/forms/FormShell"
 import { QuestionRenderer } from "../../../components/forms/QuestionRenderer"
@@ -65,6 +66,8 @@ export default function FormPage({
   params: { formId: string }
   searchParams: Record<string, string | string[] | undefined>
 }) {
+  const router = useRouter()
+
   // URL params
   const lang = ((searchParams?.lang as string) ?? "pt-BR").toString()
   const token = ((searchParams?.t as string) ?? "").toString()
@@ -143,17 +146,42 @@ export default function FormPage({
     if (error) throw error
   }
 
+  // -------- SUBMIT (updated: redirect to /success on ok) --------
   async function submitForm() {
+    // Prevent double submits
+    if (submitting) return
     setSubmitting(true)
-    const { data, error } = await supabase.rpc("sec_submit_form_v3", { p_token: token })
-    setSubmitting(false)
-    if (error) return alert("Erro: " + error.message)
-    if (data?.ok) {
-      alert("Formulário enviado!")
-      const res = await supabase.rpc("sec_get_form_payload_v3", { p_lang: lang, p_token: token })
-      if (!res.error) setPayload(res.data as Payload)
-    } else {
-      alert("Faltam campos obrigatórios: " + (data?.missing_required || []).join(", "))
+
+    try {
+      const { data, error } = await supabase.rpc("sec_submit_form_v3", { p_token: token })
+
+      if (error) {
+        setSubmitting(false)
+        return alert("Erro: " + error.message)
+      }
+
+      if (data?.ok) {
+        // Successful submission -> redirect to success page
+        // We don't need to keep the current page state after redirect.
+        router.push("/success")
+        return
+      } else {
+        // Not OK (missing required fields) -> inform user and keep on the form
+        setSubmitting(false)
+        alert("Faltam campos obrigatórios: " + (data?.missing_required || []).join(", "))
+        // Optionally refresh the payload to show server-side validation state:
+        try {
+          const res = await supabase.rpc("sec_get_form_payload_v3", { p_lang: lang, p_token: token })
+          if (!res.error) setPayload(res.data as Payload)
+        } catch (e) {
+          // ignore refresh errors
+          console.error("Failed to refresh payload after failed submit:", e)
+        }
+      }
+    } catch (e: any) {
+      setSubmitting(false)
+      console.error("submitForm error:", e)
+      alert("Erro de rede: " + (e?.message || e))
     }
   }
 
