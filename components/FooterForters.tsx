@@ -11,7 +11,7 @@ export default function FooterForters() {
           <div>
            
             <Image
-              src="/forters-logo.png"
+              src="/forters-logo.jpeg"
               alt="Forters"
               width={84}
               height={24}
