@@ -1,5 +1,7 @@
 // app/success/page.tsx
 import Link from 'next/link';
+import FooterForters from "@/components/FooterForters";
+
 
 export const metadata = {
   title: 'Obrigado — Forters',
@@ -87,6 +89,7 @@ export default function SuccessPage() {
           </a>
         </footer>
       </main>
+      <FooterForters />
     </div>
   );
 }
