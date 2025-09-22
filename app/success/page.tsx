@@ -9,9 +9,9 @@ export const metadata = {
 export default function SuccessPage() {
   return (
     <div className="min-h-screen bg-[#172534] text-white">
-      {/* Top white full-width banner with logo */}
+     
       <header className="bg-white w-full">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-center">
           <img src="/forters-logo.jpeg" alt="Forters" className="h-14" />
         </div>
       </header>
@@ -28,26 +28,31 @@ export default function SuccessPage() {
           <h2 className="text-center text-xl font-semibold text-white mb-6">Próximos Passos</h2>
 
           <ol className="space-y-6">
+         
             <li className="flex items-start gap-6">
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center bg-orange-500 font-bold">1</div>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-700 text-slate-200 font-bold">1</div>
               </div>
               <div>
-                <div className="font-semibold text-white">Preenchimento de dados (você está aqui)</div>
+                <div className="font-semibold text-white">Preenchimento de dados</div>
                 <div className="text-slate-300 mt-1">Preencha o formulário e envie os documentos.</div>
               </div>
             </li>
 
+         
             <li className="flex items-start gap-6">
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-700 text-slate-200 font-bold">2</div>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center bg-orange-500 font-bold">2</div>
               </div>
               <div>
-                <div className="font-semibold text-white">Cotação</div>
+                <div className="font-semibold text-white">
+                  Cotação <span className="font-normal text-slate-300">(você está aqui)</span>
+                </div>
                 <div className="text-slate-300 mt-1">Buscaremos, junto às seguradoras parceiras, a melhor opção de cobertura para sua empresa.</div>
               </div>
             </li>
 
+            
             <li className="flex items-start gap-6">
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-700 text-slate-200 font-bold">3</div>
@@ -58,6 +63,7 @@ export default function SuccessPage() {
               </div>
             </li>
 
+          
             <li className="flex items-start gap-6">
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-700 text-slate-200 font-bold">4</div>
@@ -84,3 +90,4 @@ export default function SuccessPage() {
     </div>
   );
 }
+
