@@ -20,6 +20,7 @@ type Template = {
 }
 
 export default function AdminPage() {
+  // ---------- Existing state ----------
   const [adminSecret, setAdminSecret] = useState("")
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedSlug, setSelectedSlug] = useState("")
@@ -32,10 +33,29 @@ export default function AdminPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ form_id?: string; token?: string } | null>(null)
-
   const [showPassword, setShowPassword] = useState(false)
   const { toast } = useToast()
 
+  // ---------- NEW: HubSpot Deal wiring state ----------
+  const [generatedToken, setGeneratedToken] = useState<string>("")
+  const [hubspotDealId, setHubspotDealId] = useState<string>("")
+  const [savingDeal, setSavingDeal] = useState<boolean>(false)
+
+  // ---------- Helpers ----------
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const formUrl =
+    result?.form_id && result?.token ? `${origin}/f/${result.form_id}?lang=${lang}&t=${result.token}` : ""
+
+  function extractTokenFromUrl(url: string): string {
+    try {
+      const u = new URL(url)
+      return u.searchParams.get("t") || ""
+    } catch {
+      return ""
+    }
+  }
+
+  // ---------- Actions ----------
   async function loadTemplates() {
     setError(null)
     setTemplates([])
@@ -70,6 +90,8 @@ export default function AdminPage() {
     setCreating(true)
     setError(null)
     setResult(null)
+    setGeneratedToken("") // reset before generating
+    setHubspotDealId("")  // reset any previous value
 
     const res = await fetch("/api/admin/create", {
       method: "POST",
@@ -94,16 +116,22 @@ export default function AdminPage() {
       })
       return
     }
+
+    // Keep original behavior
     setResult(json)
+
+    // NEW: capture token safely (prefer the explicit token; fall back to parsing URL)
+    const tokenFromResponse = json?.token || ""
+    const tokenFromUrl = tokenFromResponse || extractTokenFromUrl(
+      `${origin}/f/${json?.form_id}?lang=${lang}&t=${json?.token}`
+    )
+    setGeneratedToken(tokenFromUrl)
 
     toast({
       title: "Link criado com sucesso",
       description: "O link seguro foi gerado e está pronto para uso",
     })
   }
-
-  const origin = typeof window !== "undefined" ? window.location.origin : ""
-  const formUrl = result?.form_id && result?.token ? `${origin}/f/${result.form_id}?lang=${lang}&t=${result.token}` : ""
 
   async function copyUrl() {
     if (!formUrl) return
@@ -122,6 +150,53 @@ export default function AdminPage() {
     }
   }
 
+  // ---------- NEW: Save HubSpot Deal ID ----------
+  async function saveHubspotDeal() {
+    if (!generatedToken) {
+      return toast({
+        title: "Gere o link primeiro",
+        description: "Precisamos do token do link para salvar o Deal ID.",
+        variant: "destructive",
+      })
+    }
+    if (!hubspotDealId || !/^\d+$/.test(hubspotDealId)) {
+      return toast({
+        title: "Deal ID inválido",
+        description: "Cole apenas números (ex.: 41368145976).",
+        variant: "destructive",
+      })
+    }
+
+    try {
+      setSavingDeal(true)
+      const res = await fetch("/api/admin/set-hubspot-deal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: generatedToken,          // Using token-based route
+          hubspot_deal_id: hubspotDealId, // Digits only
+        }),
+      })
+      const j = await res.json()
+      if (!res.ok || !j.ok) {
+        throw new Error(j.error || "Falha ao salvar Deal ID")
+      }
+      toast({
+        title: "Deal ID salvo",
+        description: "O formulário foi vinculado ao negócio do HubSpot.",
+      })
+    } catch (e: any) {
+      toast({
+        title: "Erro ao salvar Deal ID",
+        description: e?.message || String(e),
+        variant: "destructive",
+      })
+    } finally {
+      setSavingDeal(false)
+    }
+  }
+
+  // ---------- UI ----------
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="w-full bg-white shadow-sm border-b border-slate-200">
@@ -169,11 +244,7 @@ export default function AdminPage() {
                       className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                       onClick={() => setShowPassword(!showPassword)}
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4 text-slate-500" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-slate-500" />
-                      )}
+                      {showPassword ? <EyeOff className="h-4 w-4 text-slate-500" /> : <Eye className="h-4 w-4 text-slate-500" />}
                     </Button>
                   </div>
                 </div>
@@ -345,7 +416,8 @@ export default function AdminPage() {
                 <CardDescription>Compartilhe este link seguro com o cliente</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* URL box */}
                   <div className="p-4 bg-white rounded-lg border border-green-200">
                     <Label className="text-sm font-medium text-slate-700 mb-2 block">URL do Questionário</Label>
                     <div className="font-mono text-sm text-slate-600 break-all bg-slate-50 p-3 rounded border">
@@ -353,7 +425,7 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col md:flex-row gap-3">
                     <Button onClick={copyUrl} variant="outline" className="flex items-center gap-2 bg-transparent">
                       <Copy className="h-4 w-4" />
                       Copiar URL
@@ -366,6 +438,41 @@ export default function AdminPage() {
                       <ExternalLink className="h-4 w-4" />
                       Abrir Link
                     </Button>
+                  </div>
+
+                  {/* NEW: HubSpot binding */}
+                  <div className="rounded-lg border border-green-200 bg-white p-4">
+                    <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                      HubSpot Deal ID (opcional)
+                    </Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="\d*"
+                        placeholder="Cole o número do negócio (ex.: 41368145976)"
+                        value={hubspotDealId}
+                        onChange={(e) => {
+                          const onlyDigits = e.target.value.replace(/\D/g, "")
+                          setHubspotDealId(onlyDigits)
+                        }}
+                        className="md:col-span-2"
+                      />
+                      <Button
+                        type="button"
+                        onClick={saveHubspotDeal}
+                        disabled={!generatedToken || !hubspotDealId || savingDeal}
+                        className="bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        {savingDeal ? "Salvando..." : "Salvar Deal ID"}
+                      </Button>
+                    </div>
+
+                    {!generatedToken && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        Gere o link primeiro para capturar o token e permitir o salvamento do Deal ID.
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
