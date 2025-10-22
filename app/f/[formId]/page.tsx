@@ -21,7 +21,16 @@ type TableRow = { row_index: number; row: Record<string, any> }
 
 type Question = {
   code: string
-  type: "boolean" | "single_select" | "multi_select" | "date" | "currency" | "text" | "number" | "attachment" | "table"
+  type:
+    | "boolean"
+    | "single_select"
+    | "multi_select"
+    | "date"
+    | "currency"
+    | "text"
+    | "number"
+    | "attachment"
+    | "table"
   label: string
   help?: string
   config?: {
@@ -56,6 +65,26 @@ function useDebouncedSaves() {
     }, SAVE_DEBOUNCE_MS)
   }
   return { saveDebounced }
+}
+
+/** ---------- Helpers ---------- */
+function findSubmitterEmail(payload: Payload | null): string {
+  if (!payload) return ""
+  // 1) try payload.form.contact.email
+  const contactEmail = payload.form?.contact?.email
+  if (typeof contactEmail === "string" && contactEmail.includes("@")) return contactEmail
+
+  // 2) try to find a question that looks like an email
+  const q = payload.questions.find((qq) => {
+    const inCode = qq.code?.toLowerCase().includes("email")
+    const inLabel = qq.label?.toLowerCase?.().includes("email")
+    return inCode || inLabel
+  })
+  const fromAnswer =
+    typeof q?.answer === "string" ? q?.answer : typeof q?.answer?.value === "string" ? q?.answer?.value : ""
+  if (fromAnswer && fromAnswer.includes("@")) return fromAnswer
+
+  return ""
 }
 
 /** ---------- Page ---------- */
@@ -146,7 +175,7 @@ export default function FormPage({
     if (error) throw error
   }
 
-  // -------- SUBMIT (updated: redirect to /success on ok) --------
+  // -------- SUBMIT (triggers HubSpot update before redirect) --------
   async function submitForm() {
     // Prevent double submits
     if (submitting) return
@@ -161,8 +190,22 @@ export default function FormPage({
       }
 
       if (data?.ok) {
-        // Successful submission -> redirect to success page
-        // We don't need to keep the current page state after redirect.
+        // 1) Successful submission -> trigger HubSpot update (non-blocking)
+        const form_instance_id = payload?.form?.id
+        const submitted_by_email = findSubmitterEmail(payload) || ""
+
+        try {
+          await fetch("/api/forms/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ form_instance_id, submitted_by_email }),
+          })
+        } catch (e) {
+          // Never block the user if this fails
+          console.warn("HubSpot call failed (non-blocking):", e)
+        }
+
+        // 2) Redirect to success page
         router.push("/success")
         return
       } else {
