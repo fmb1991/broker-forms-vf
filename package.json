@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "@supabase/supabase-js": "2.57.4",
     "@radix-ui/react-checkbox": "1.0.0",
     "@radix-ui/react-label": "2.0.2",
