@@ -2,10 +2,19 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
 
-export const runtime = "nodejs";          // ensure Node runtime (not Edge)
-export const dynamic = "force-dynamic";   // this route depends on request-time data
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, { params }: { params: { form_id: string } }) {
+// Some projects use different column names for the storage path.
+// We'll try common alternatives.
+function pickPath(f: any) {
+  return f?.storage_path || f?.path || f?.file_path || f?.filepath || "";
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: { form_id: string } }
+) {
   try {
     const { adminSecret } = await req.json().catch(() => ({} as any));
     if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
@@ -14,36 +23,50 @@ export async function POST(req: Request, { params }: { params: { form_id: string
 
     const formId = params.form_id;
 
-    // Lazy import JSZip to avoid ESM interop issues
-    const { default: JSZip } = await import("jszip");
-    const zip = new JSZip();
-
-    // 1) PDF placeholder (replace later with your real PDF buffer)
-    zip.file(`form_${formId}.pdf`, new Uint8Array([37,80,68,70,10,37,37,69,79,70])); // "%PDF\n%%EOF"
-
-    // 2) Attachments from storage bucket "form-uploads"
+    // 1) Get file list from DB
     const { data: files, error: filesErr } = await supabaseAdmin
       .from("form_files")
-      .select("storage_path, filename")
+      .select("filename, storage_path, path, file_path, filepath")
       .eq("form_id", formId);
 
     if (filesErr) {
       return NextResponse.json({ error: filesErr.message }, { status: 500 });
     }
 
-    if (files && files.length > 0) {
-      for (const f of files) {
-        const { data: fileRes, error: dlErr } = await supabaseAdmin
-          .storage
-          .from("form-uploads")
-          .download(f.storage_path);
+    // 2) Build ZIP with JSZip (lazy import)
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
 
-        if (!dlErr && fileRes) {
-          const arr = await fileRes.arrayBuffer();
-          const name = f.filename || f.storage_path.split("/").pop() || "attachment";
-          zip.file(`attachments/${name}`, arr);
-        }
-      }
+    let added = 0;
+
+    for (const f of files || []) {
+      const storagePath = pickPath(f);
+      if (!storagePath) continue;
+
+      // Adjust this if your bucket name is different
+      const { data: fileRes, error: dlErr } = await supabaseAdmin.storage
+        .from("form-uploads")
+        .download(storagePath);
+
+      if (dlErr || !fileRes) continue;
+
+      const buf = await fileRes.arrayBuffer();
+      const safeName =
+        f.filename ||
+        storagePath.split("/").pop() ||
+        `arquivo_${added + 1}`;
+
+      // Put inside attachments/ folder in the ZIP
+      zip.file(`attachments/${safeName}`, buf);
+      added++;
+    }
+
+    // If there were no attachments, still return a small zip so user gets a file
+    if (added === 0) {
+      zip.file(
+        "attachments/NO_ATTACHMENTS.txt",
+        "Este formulário não possui anexos armazenados."
+      );
     }
 
     const out = await zip.generateAsync({ type: "uint8array" });
