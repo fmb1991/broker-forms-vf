@@ -1,4 +1,5 @@
-// app/api/formsadmin/pdf/[form_id]/route.ts
+// app/api/formsadmin/pdf/[form_id]/route.tsx
+import React from "react";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
 import path from "path";
@@ -9,9 +10,12 @@ import FortersFormPdf, { QAItem } from "@/pdf-templates/FortersFormPdf";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, { params }: { params: { form_id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: { form_id: string } }
+) {
   try {
-    const { adminSecret } = await req.json().catch(() => ({}));
+    const { adminSecret } = await req.json().catch(() => ({} as any));
     if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
@@ -26,7 +30,10 @@ export async function POST(req: Request, { params }: { params: { form_id: string
       .single();
 
     if (formErr || !form) {
-      return NextResponse.json({ error: formErr?.message || "form_not_found" }, { status: 404 });
+      return NextResponse.json(
+        { error: formErr?.message || "form_not_found" },
+        { status: 404 }
+      );
     }
 
     // 2) Questions for this template
@@ -41,7 +48,6 @@ export async function POST(req: Request, { params }: { params: { form_id: string
     }
 
     // 3) Answers for this form
-    // NOTE: adapt the column if your schema stores the answer differently
     const { data: answers, error: aErr } = await supabaseAdmin
       .from("form_answers")
       .select("question_id, answer_json, answer_text, value_json, value_text")
@@ -51,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { form_id: string
       return NextResponse.json({ error: aErr.message }, { status: 500 });
     }
 
-    // 4) Attachments list (names only; files will be in ZIP route)
+    // 4) Attachments list (names only)
     const { data: files } = await supabaseAdmin
       .from("form_files")
       .select("filename")
@@ -61,22 +67,32 @@ export async function POST(req: Request, { params }: { params: { form_id: string
     const answerMap = new Map<number, string>();
     for (const a of answers || []) {
       const val =
-        // try multiple fields to be schema-robust
         (a.answer_text as string) ??
         (a.value_text as string) ??
-        (typeof (a.answer_json as any)?.value === "string" ? (a.answer_json as any).value : undefined) ??
-        (typeof (a.value_json as any)?.value === "string" ? (a.value_json as any).value : undefined) ??
+        (typeof (a.answer_json as any)?.value === "string"
+          ? (a.answer_json as any).value
+          : undefined) ??
+        (typeof (a.value_json as any)?.value === "string"
+          ? (a.value_json as any).value
+          : undefined) ??
         JSON.stringify(a.answer_json ?? a.value_json ?? "");
       answerMap.set(a.question_id as number, val);
     }
 
     const qaItems: QAItem[] = (questions || []).map((q: any) => {
-      // label_json: { "pt-BR": "...", "es-419": "...", "en": "..." }
-      const label = typeof q.label_json === "object"
-        ? q.label_json[form.language] || q.label_json["pt-BR"] || q.label_json["en"] || q.label_json["es-419"]
-        : (q.label_json || "");
+      const label =
+        typeof q.label_json === "object"
+          ? q.label_json[form.language] ||
+            q.label_json["pt-BR"] ||
+            q.label_json["en"] ||
+            q.label_json["es-419"]
+          : q.label_json || "";
       const answer = answerMap.get(q.id) || "";
-      return { order: q.order ?? 0, question: String(label || `Pergunta #${q.id}`), answer: String(answer || "") };
+      return {
+        order: q.order ?? 0,
+        question: String(label || `Pergunta #${q.id}`),
+        answer: String(answer || ""),
+      };
     });
 
     // 6) Read Forters logo as data URL (from /public)
@@ -86,18 +102,17 @@ export async function POST(req: Request, { params }: { params: { form_id: string
       const bytes = await fs.readFile(logoPath);
       logoDataUrl = `data:image/jpeg;base64,${bytes.toString("base64")}`;
     } catch {
-      // no logo available, fine
       logoDataUrl = "";
     }
 
-    // 7) Static broker info (as requested)
+    // 7) Static broker info
     const brokerInfo = {
       name: "Forters Corretora de Seguros LTDA",
       cnpj: "50.236.609/0001-32",
       susep: "2321454513",
     };
 
-    // 8) Build PDF buffer
+    // 8) Render PDF
     const instance = (
       <FortersFormPdf
         logoDataUrl={logoDataUrl}
