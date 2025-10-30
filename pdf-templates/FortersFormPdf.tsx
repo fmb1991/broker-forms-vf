@@ -9,17 +9,10 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 
-// TIP: If you want bold weights reliably, register a font family with bold variant.
-// For now we’ll use default font with "bold" where needed.
-
 const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 10 },
 
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   logo: { width: 120, height: 48, marginRight: 16 },
 
   title: { fontSize: 18, marginBottom: 4 },
@@ -43,7 +36,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 9, color: "#666", marginBottom: 2 },
   value: { fontSize: 10, color: "#111" },
 
-  // Table
+  // table
   table: {
     display: "table",
     width: "auto",
@@ -54,13 +47,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderRadius: 4,
   },
-  tableRow: {
-    margin: "auto",
-    flexDirection: "row",
-  },
-  tableHeaderRow: {
-    backgroundColor: "#F5F7FA",
-  },
+  tableRow: { margin: "auto", flexDirection: "row" },
+  tableHeaderRow: { backgroundColor: "#F5F7FA" },
   tableColQ: {
     width: "55%",
     borderLeftWidth: 0,
@@ -82,7 +70,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   thText: { fontSize: 10, fontWeight: "bold" },
-  cellText: { fontSize: 10 },
+  cellText: { fontSize: 10, whiteSpace: "pre-wrap" as any },
 
   footer: {
     position: "absolute",
@@ -97,27 +85,23 @@ const styles = StyleSheet.create({
 export type QAItem = {
   order: number;
   question: string;
-  answer: string;
+  answer: string; // may include \n for multiline (tables)
 };
 
 export default function FortersFormPdf({
   logoDataUrl,
   companyName,
+  formName,          // 👈 NEW (replaces language)
   filledAt,
-  language,
   brokerInfo,
   qaItems,
   attachments,
 }: {
   logoDataUrl: string;
   companyName: string;
+  formName?: string;
   filledAt?: string;
-  language?: string;
-  brokerInfo: {
-    name: string;
-    cnpj: string;
-    susep: string;
-  };
+  brokerInfo: { name: string; cnpj: string; susep: string };
   qaItems: QAItem[];
   attachments: { filename: string }[];
 }) {
@@ -125,7 +109,7 @@ export default function FortersFormPdf({
 
   return (
     <Document>
-      {/* PAGE 1 — Cover */}
+      {/* PAGE 1 — cover */}
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
           {!!logoDataUrl && <Image src={logoDataUrl} style={styles.logo} />}
@@ -145,15 +129,13 @@ export default function FortersFormPdf({
 
               <View style={{ height: 8 }} />
 
-              <Text style={styles.label}>Idioma do formulário</Text>
-              <Text style={styles.value}>{language || "-"}</Text>
+              <Text style={styles.label}>Nome do formulário</Text>
+              <Text style={styles.value}>{formName || "-"}</Text>
 
               <View style={{ height: 8 }} />
 
               <Text style={styles.label}>Data de preenchimento</Text>
-              <Text style={styles.value}>
-                {dt ? dt.toLocaleDateString() : "-"}
-              </Text>
+              <Text style={styles.value}>{dt ? dt.toLocaleDateString() : "-"}</Text>
             </View>
           </View>
 
@@ -177,22 +159,25 @@ export default function FortersFormPdf({
           </View>
         </View>
 
-        {!!attachments?.length && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Anexos enviados</Text>
-            <View style={styles.card}>
-              {attachments.map((f, idx) => (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Anexos enviados {attachments?.length ? `(${attachments.length})` : ""}
+          </Text>
+          <View style={styles.card}>
+            {attachments?.length ? (
+              attachments.map((f, idx) => (
                 <Text key={idx} style={styles.value}>
                   • {f.filename}
                 </Text>
-              ))}
-            </View>
+              ))
+            ) : (
+              <Text style={styles.value}>Nenhum anexo enviado</Text>
+            )}
           </View>
-        )}
+        </View>
 
         <Text style={styles.footer}>
-          Forters – Documento gerado automaticamente •{" "}
-          {new Date().toLocaleDateString()}
+          Forters – Documento gerado automaticamente • {new Date().toLocaleDateString()}
         </Text>
       </Page>
 
@@ -229,4 +214,3 @@ export default function FortersFormPdf({
     </Document>
   );
 }
-
