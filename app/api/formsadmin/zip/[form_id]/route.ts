@@ -5,10 +5,37 @@ import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Some projects use different column names for the storage path.
-// We'll try common alternatives.
-function pickPath(f: any) {
-  return f?.storage_path || f?.path || f?.file_path || f?.filepath || "";
+// Try many possible column names, but now we DO NOT select them explicitly.
+function pickPath(f: Record<string, any>): string {
+  // prefer explicit storage path keys
+  const candidates = [
+    "storage_path",
+    "object_path",
+    "objectKey",
+    "object_key",
+    "key",
+    "full_path",
+    "file_path",
+    "filepath",
+    "path",
+  ];
+
+  for (const k of candidates) {
+    const v = f?.[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+
+  // fallback heuristic: if there is a folder + filename pattern in custom schemas
+  if (typeof f?.folder === "string" && typeof f?.filename === "string") {
+    return `${f.folder.replace(/\/+$/, "")}/${f.filename.replace(/^\/+/, "")}`;
+  }
+
+  // as a last resort, sometimes only filename is stored at root of bucket
+  if (typeof f?.filename === "string" && f.filename.trim()) {
+    return f.filename.trim();
+  }
+
+  return "";
 }
 
 export async function POST(
@@ -23,49 +50,48 @@ export async function POST(
 
     const formId = params.form_id;
 
-    // 1) Get file list from DB
+    // 1) Fetch ALL columns so we don't break if some don't exist
     const { data: files, error: filesErr } = await supabaseAdmin
       .from("form_files")
-      .select("filename, storage_path, path, file_path, filepath")
+      .select("*")
       .eq("form_id", formId);
 
     if (filesErr) {
       return NextResponse.json({ error: filesErr.message }, { status: 500 });
     }
 
-    // 2) Build ZIP with JSZip (lazy import)
+    // 2) Prepare ZIP
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-
     let added = 0;
 
     for (const f of files || []) {
       const storagePath = pickPath(f);
       if (!storagePath) continue;
 
-      // Adjust this if your bucket name is different
+      // Adjust bucket name if yours is different
       const { data: fileRes, error: dlErr } = await supabaseAdmin.storage
         .from("form-uploads")
         .download(storagePath);
 
-      if (dlErr || !fileRes) continue;
+      if (dlErr || !fileRes) {
+        // Keep going; we still want to return a ZIP with whatever we could fetch
+        continue;
+      }
 
       const buf = await fileRes.arrayBuffer();
-      const safeName =
-        f.filename ||
-        storagePath.split("/").pop() ||
-        `arquivo_${added + 1}`;
+      const filenameFromPath = storagePath.split("/").pop() || "file";
+      const safeName = f?.filename || filenameFromPath || `file_${added + 1}`;
 
-      // Put inside attachments/ folder in the ZIP
       zip.file(`attachments/${safeName}`, buf);
       added++;
     }
 
-    // If there were no attachments, still return a small zip so user gets a file
+    // If nothing added, still return a small zip so the browser downloads something
     if (added === 0) {
       zip.file(
         "attachments/NO_ATTACHMENTS.txt",
-        "Este formulário não possui anexos armazenados."
+        "Este formulário não possui anexos armazenados ou os caminhos não estão disponíveis."
       );
     }
 
@@ -85,3 +111,4 @@ export async function POST(
     );
   }
 }
+
