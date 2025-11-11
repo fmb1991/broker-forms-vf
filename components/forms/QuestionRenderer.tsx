@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,30 +13,62 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Upload, FileText } from "lucide-react"
 
+/* =========================
+   Types (extended for tables)
+   ========================= */
+
+type I18n = Record<string, string>
+
 type TableSchemaField = {
   key: string
   type: "text" | "boolean" | "number" | "date" | "currency"
-  label?: Record<string, string>
+  label?: I18n
   required?: boolean
+  readonly?: boolean
+  // future: options?: { value: string; label: I18n }[]
+}
+
+type TableRow = { row_index: number; row: Record<string, any> }
+
+/** NEW: table config contract (backwards compatible) */
+type TableConfig = {
+  currency?: string
+  decimals?: number
+  table_schema?: TableSchemaField[]
+  max_mb?: number
+  allowed?: string[]
+
+  // NEW for fixed tables
+  mode?: "dynamic" | "fixed"              // default: dynamic
+  allow_add_rows?: boolean                // default: true
+  allow_delete_rows?: boolean             // default: true
+  table_rows?: Array<{
+    code: string
+    title?: I18n
+    subtitle?: I18n
+  }>
 }
 
 type Option = { value: string; label: string; order: number }
-type TableRow = { row_index: number; row: Record<string, any> }
 
 type Question = {
   code: string
-  type: "boolean" | "single_select" | "multi_select" | "date" | "currency" | "text" | "number" | "attachment" | "table"
+  type:
+    | "boolean"
+    | "single_select"
+    | "multi_select"
+    | "date"
+    | "currency"
+    | "text"
+    | "number"
+    | "attachment"
+    | "table"
   label: string
   help?: string
-  config?: {
-    currency?: string
-    decimals?: number
-    table_schema?: TableSchemaField[]
-    max_mb?: number
-    allowed?: string[]
-  }
+  config?: TableConfig
   options?: Option[]
   answer: any
+  /** dynamic tables (current behavior) */
   table_rows?: TableRow[]
 }
 
@@ -50,6 +81,15 @@ type QuestionRendererProps = {
   onTableRowChange?: (code: string, rowIndex: number, row: Record<string, any>) => void
   onAddTableRow?: (code: string) => void
   token?: string
+}
+
+/* =========================
+   Helpers
+   ========================= */
+
+function i18nPick(obj?: I18n, locale = "pt-BR", fallback = "") {
+  if (!obj) return fallback
+  return obj[locale] ?? obj["pt-BR"] ?? obj["en"] ?? Object.values(obj)[0] ?? fallback
 }
 
 export function QuestionRenderer({
@@ -70,9 +110,9 @@ export function QuestionRenderer({
     return (
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-px bg-slate-300 flex-1"></div>
+          <div className="h-px bg-slate-300 flex-1" />
           <h2 className="text-lg font-semibold text-slate-700 px-4 py-2 bg-slate-100 rounded-full">{sectionTitle}</h2>
-          <div className="h-px bg-slate-300 flex-1"></div>
+          <div className="h-px bg-slate-300 flex-1" />
         </div>
       </div>
     )
@@ -94,6 +134,8 @@ export function QuestionRenderer({
       </div>
     </CardHeader>
   )
+
+  /* ========= Scalars ========= */
 
   const renderBooleanQuestion = () => (
     <CardContent>
@@ -121,11 +163,7 @@ export function QuestionRenderer({
 
   const renderSingleSelect = () => (
     <CardContent>
-      <Select
-        value={question.answer || ""}
-        onValueChange={(value) => onAnswerChange(question.code, value)}
-        disabled={locked}
-      >
+      <Select value={question.answer || ""} onValueChange={(value) => onAnswerChange(question.code, value)} disabled={locked}>
         <SelectTrigger className="w-full">
           <SelectValue placeholder="Selecione uma opção" />
         </SelectTrigger>
@@ -198,12 +236,7 @@ export function QuestionRenderer({
 
   const renderDateQuestion = () => (
     <CardContent>
-      <Input
-        type="date"
-        value={(question.answer as string) || ""}
-        onChange={(e) => onAnswerChange(question.code, e.target.value)}
-        disabled={locked}
-      />
+      <Input type="date" value={(question.answer as string) || ""} onChange={(e) => onAnswerChange(question.code, e.target.value)} disabled={locked} />
     </CardContent>
   )
 
@@ -233,6 +266,8 @@ export function QuestionRenderer({
       </CardContent>
     )
   }
+
+  /* ========= Attachments ========= */
 
   const renderAttachmentQuestion = () => {
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,13 +330,7 @@ export function QuestionRenderer({
               <Upload className="h-4 w-4" />
               {uploadBusy ? "Enviando..." : "Selecionar Arquivo"}
             </Button>
-            <input
-              id={`file-${question.code}`}
-              type="file"
-              onChange={handleFileSelect}
-              className="hidden"
-              disabled={locked || uploadBusy}
-            />
+            <input id={`file-${question.code}`} type="file" onChange={handleFileSelect} className="hidden" disabled={locked || uploadBusy} />
           </div>
 
           {question.answer?.filename && (
@@ -321,79 +350,104 @@ export function QuestionRenderer({
     )
   }
 
+  /* ========= Tables (dynamic + fixed) ========= */
+
   const renderTableQuestion = () => {
-    const schema = question.config?.table_schema || []
-    const rows = question.table_rows || []
+    const cfg = question.config || {}
+    const schema = cfg.table_schema || []
+    const mode: "dynamic" | "fixed" = cfg.mode ?? "dynamic"
+    const allowAdd = mode !== "fixed" && (cfg.allow_add_rows ?? true)
+    const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved for future
+
+    // When fixed: derive visual rows from config.table_rows
+    // When dynamic: use current question.table_rows (existing behavior)
+    const fixedDefs = (cfg.table_rows || []).map((r) => ({ code: r.code, title: r.title, subtitle: r.subtitle }))
+    const dynamicRows = question.table_rows || []
+
+    // Merge into a single array the renderer understands: { row_index, row, __meta }
+    const rows =
+      mode === "fixed"
+        ? fixedDefs.map((r, idx) => ({
+            row_index: idx + 1,
+            row: dynamicRows[idx]?.row || {}, // keep any existing answers by position
+            __meta: r,
+          }))
+        : dynamicRows.map((r) => ({ ...r, __meta: undefined }))
 
     const fieldLabel = (field: TableSchemaField) => {
       if (!field.label) return field.key
-      return field.label["pt-BR"] || field.label["en"] || field.key
+      return i18nPick(field.label, "pt-BR", field.key)
     }
 
     return (
       <CardContent>
         <div className="space-y-4">
-          {/* Table header */}
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length}, 1fr)` }}>
-            {schema.map((field) => (
-              <div key={`header-${field.key}`} className="font-semibold text-slate-700 p-2 bg-slate-50 rounded">
-                {fieldLabel(field)}
-              </div>
-            ))}
-          </div>
+          {/* Optional row titles (fixed mode) */}
+          {rows.map((row) => {
+            return (
+              <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
+                {row.__meta && (
+                  <div className="mb-1">
+                    <div className="text-sm font-medium">{i18nPick(row.__meta.title, "pt-BR")}</div>
+                    {row.__meta.subtitle && (
+                      <div className="text-xs text-slate-500">{i18nPick(row.__meta.subtitle, "pt-BR")}</div>
+                    )}
+                  </div>
+                )}
 
-          {/* Table rows */}
-          <div className="space-y-3">
-            {rows.map((row) => (
-              <div
-                key={row.row_index}
-                className="grid gap-4 p-3 bg-slate-50/50 rounded-lg border"
-                style={{ gridTemplateColumns: `repeat(${schema.length}, 1fr)` }}
-              >
-                {schema.map((field) => {
-                  const value = row.row?.[field.key]
+                {/* row grid */}
+                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length}, 1fr)` }}>
+                  {schema.map((field) => {
+                    const value = row.row?.[field.key]
+                    const ro = !!field.readonly
 
-                  if (field.type === "boolean") {
+                    if (field.type === "boolean") {
+                      return (
+                        <div key={`${row.row_index}-${field.key}`} className="flex items-center space-x-2">
+                          <Checkbox
+                            checked={!!value}
+                            onCheckedChange={(checked) => {
+                              if (onTableRowChange) {
+                                const newRow = { ...row.row, [field.key]: checked }
+                                onTableRowChange(question.code, row.row_index, newRow)
+                              }
+                            }}
+                            disabled={locked || ro}
+                          />
+                          <Label className="text-sm">{fieldLabel(field)}</Label>
+                        </div>
+                      )
+                    }
+
                     return (
-                      <div key={`${row.row_index}-${field.key}`} className="flex items-center space-x-2">
-                        <Checkbox
-                          checked={!!value}
-                          onCheckedChange={(checked) => {
+                      <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
+                        <label className="text-xs font-medium mb-1">{fieldLabel(field)}</label>
+                        <Input
+                          type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                          value={value ?? ""}
+                          onChange={(e) => {
                             if (onTableRowChange) {
-                              const newRow = { ...row.row, [field.key]: checked }
+                              const newValue =
+                                field.type === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value
+                              const newRow = { ...row.row, [field.key]: newValue }
                               onTableRowChange(question.code, row.row_index, newRow)
                             }
                           }}
-                          disabled={locked}
+                          disabled={locked || ro}
+                          className="text-sm"
                         />
-                        <Label className="text-sm">{fieldLabel(field)}</Label>
                       </div>
                     )
-                  }
+                  })}
+                </div>
 
-                  return (
-                    <Input
-                      key={`${row.row_index}-${field.key}`}
-                      type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-                      value={value || ""}
-                      onChange={(e) => {
-                        if (onTableRowChange) {
-                          const newValue =
-                            field.type === "number" && e.target.value !== "" ? Number(e.target.value) : e.target.value
-                          const newRow = { ...row.row, [field.key]: newValue }
-                          onTableRowChange(question.code, row.row_index, newRow)
-                        }
-                      }}
-                      disabled={locked}
-                      className="text-sm"
-                    />
-                  )
-                })}
+                {/* delete button could go here when allowDelete=true (not implemented before) */}
               </div>
-            ))}
-          </div>
+            )
+          })}
 
-          {!locked && onAddTableRow && (
+          {/* add row (dynamic only) */}
+          {!locked && allowAdd && onAddTableRow && (
             <Button variant="outline" onClick={() => onAddTableRow(question.code)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
               Adicionar Linha
@@ -443,3 +497,4 @@ export function QuestionRenderer({
     </div>
   )
 }
+
