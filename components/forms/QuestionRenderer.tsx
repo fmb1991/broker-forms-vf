@@ -460,5 +460,3 @@ export function QuestionRenderer({
       </CardContent>
     )
   }
-
-
