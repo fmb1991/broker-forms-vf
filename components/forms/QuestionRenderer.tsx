@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Upload, FileText } from "lucide-react"
 
 /* =========================
-   Types (extended for tables)
+   Types
    ========================= */
 
 type I18n = Record<string, string>
@@ -25,31 +25,23 @@ type TableSchemaField = {
   label?: I18n
   required?: boolean
   readonly?: boolean
-  // future: options?: { value: string; label: I18n }[]
 }
 
+type Option = { value: string; label: string; order: number }
 type TableRow = { row_index: number; row: Record<string, any> }
 
-/** NEW: table config contract (backwards compatible) */
 type TableConfig = {
   currency?: string
   decimals?: number
   table_schema?: TableSchemaField[]
   max_mb?: number
   allowed?: string[]
-
   // NEW for fixed tables
-  mode?: "dynamic" | "fixed"              // default: dynamic
-  allow_add_rows?: boolean                // default: true
-  allow_delete_rows?: boolean             // default: true
-  table_rows?: Array<{
-    code: string
-    title?: I18n
-    subtitle?: I18n
-  }>
+  mode?: "dynamic" | "fixed"
+  allow_add_rows?: boolean
+  allow_delete_rows?: boolean
+  table_rows?: Array<{ code: string; title?: I18n; subtitle?: I18n }>
 }
-
-type Option = { value: string; label: string; order: number }
 
 type Question = {
   code: string
@@ -68,7 +60,6 @@ type Question = {
   config?: TableConfig
   options?: Option[]
   answer: any
-  /** dynamic tables (current behavior) */
   table_rows?: TableRow[]
 }
 
@@ -92,6 +83,10 @@ function i18nPick(obj?: I18n, locale = "pt-BR", fallback = "") {
   return obj[locale] ?? obj["pt-BR"] ?? obj["en"] ?? Object.values(obj)[0] ?? fallback
 }
 
+/* =========================
+   Component
+   ========================= */
+
 export function QuestionRenderer({
   question,
   questionNumber,
@@ -111,7 +106,9 @@ export function QuestionRenderer({
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="h-px bg-slate-300 flex-1" />
-          <h2 className="text-lg font-semibold text-slate-700 px-4 py-2 bg-slate-100 rounded-full">{sectionTitle}</h2>
+          <h2 className="text-lg font-semibold text-slate-700 px-4 py-2 bg-slate-100 rounded-full">
+            {sectionTitle}
+          </h2>
           <div className="h-px bg-slate-300 flex-1" />
         </div>
       </div>
@@ -357,20 +354,18 @@ export function QuestionRenderer({
     const schema = cfg.table_schema || []
     const mode: "dynamic" | "fixed" = cfg.mode ?? "dynamic"
     const allowAdd = mode !== "fixed" && (cfg.allow_add_rows ?? true)
-    const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved for future
+    // const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved
 
     // Fixed rows definition coming from config
     const fixedDefs = (cfg.table_rows || []).map((r) => ({ code: r.code, title: r.title, subtitle: r.subtitle }))
 
     // Existing stored rows from backend (dynamicRows) might have row_index 1..N but not in order;
-    // build a fast lookup by row_index so we don't rely on array position.
+    // build a lookup by row_index so we don't rely on array position.
     const dynamicRows = question.table_rows || []
     const byIndex = new Map<number, { row_index: number; row: Record<string, any> }>()
     for (const r of dynamicRows) byIndex.set(r.row_index, r)
 
     // Build renderer rows:
-    // - Fixed: use index+1 as the canonical row_index, pull any existing value by that index
-    // - Dynamic: keep as is
     const rows =
       mode === "fixed"
         ? fixedDefs.map((r, idx) => {
@@ -382,7 +377,7 @@ export function QuestionRenderer({
 
     const fieldLabel = (field: TableSchemaField) => {
       if (!field.label) return field.key
-      return (field.label["pt-BR"] || field.label["en"] || field.key)
+      return i18nPick(field.label, "pt-BR", field.key)
     }
 
     return (
@@ -393,10 +388,12 @@ export function QuestionRenderer({
               <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
                 {row.__meta && (
                   <div className="mb-1">
-                    <div className="text-sm font-medium">{(row.__meta.title && (row.__meta.title["pt-BR"] || Object.values(row.__meta.title)[0])) || ""}</div>
+                    <div className="text-sm font-medium">
+                      {i18nPick(row.__meta.title, "pt-BR")}
+                    </div>
                     {row.__meta.subtitle && (
                       <div className="text-xs text-slate-500">
-                        {row.__meta.subtitle["pt-BR"] || Object.values(row.__meta.subtitle)[0]}
+                        {i18nPick(row.__meta.subtitle, "pt-BR")}
                       </div>
                     )}
                   </div>
@@ -460,3 +457,44 @@ export function QuestionRenderer({
       </CardContent>
     )
   }
+
+  const renderQuestionContent = () => {
+    switch (question.type) {
+      case "boolean":
+        return renderBooleanQuestion()
+      case "single_select":
+        return renderSingleSelect()
+      case "multi_select":
+        return renderMultiSelect()
+      case "text":
+        return renderTextQuestion()
+      case "number":
+        return renderNumberQuestion()
+      case "date":
+        return renderDateQuestion()
+      case "currency":
+        return renderCurrencyQuestion()
+      case "attachment":
+        return renderAttachmentQuestion()
+      case "table":
+        return renderTableQuestion()
+      default:
+        return (
+          <CardContent>
+            <div className="text-slate-500">Tipo de pergunta não suportado: {question.type}</div>
+          </CardContent>
+        )
+    }
+  }
+
+  return (
+    <div>
+      {renderSectionTitle()}
+      <Card className="bg-white/80 backdrop-blur-sm border-slate-200 shadow-sm">
+        {renderQuestionHeader()}
+        {renderQuestionContent()}
+      </Card>
+    </div>
+  )
+}
+
