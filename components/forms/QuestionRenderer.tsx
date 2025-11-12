@@ -359,43 +359,49 @@ export function QuestionRenderer({
     const allowAdd = mode !== "fixed" && (cfg.allow_add_rows ?? true)
     const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved for future
 
-    // When fixed: derive visual rows from config.table_rows
-    // When dynamic: use current question.table_rows (existing behavior)
+    // Fixed rows definition coming from config
     const fixedDefs = (cfg.table_rows || []).map((r) => ({ code: r.code, title: r.title, subtitle: r.subtitle }))
-    const dynamicRows = question.table_rows || []
 
-    // Merge into a single array the renderer understands: { row_index, row, __meta }
+    // Existing stored rows from backend (dynamicRows) might have row_index 1..N but not in order;
+    // build a fast lookup by row_index so we don't rely on array position.
+    const dynamicRows = question.table_rows || []
+    const byIndex = new Map<number, { row_index: number; row: Record<string, any> }>()
+    for (const r of dynamicRows) byIndex.set(r.row_index, r)
+
+    // Build renderer rows:
+    // - Fixed: use index+1 as the canonical row_index, pull any existing value by that index
+    // - Dynamic: keep as is
     const rows =
       mode === "fixed"
-        ? fixedDefs.map((r, idx) => ({
-            row_index: idx + 1,
-            row: dynamicRows[idx]?.row || {}, // keep any existing answers by position
-            __meta: r,
-          }))
+        ? fixedDefs.map((r, idx) => {
+            const row_index = idx + 1
+            const match = byIndex.get(row_index)
+            return { row_index, row: match?.row || {}, __meta: r }
+          })
         : dynamicRows.map((r) => ({ ...r, __meta: undefined }))
 
     const fieldLabel = (field: TableSchemaField) => {
       if (!field.label) return field.key
-      return i18nPick(field.label, "pt-BR", field.key)
+      return (field.label["pt-BR"] || field.label["en"] || field.key)
     }
 
     return (
       <CardContent>
         <div className="space-y-4">
-          {/* Optional row titles (fixed mode) */}
           {rows.map((row) => {
             return (
               <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
                 {row.__meta && (
                   <div className="mb-1">
-                    <div className="text-sm font-medium">{i18nPick(row.__meta.title, "pt-BR")}</div>
+                    <div className="text-sm font-medium">{(row.__meta.title && (row.__meta.title["pt-BR"] || Object.values(row.__meta.title)[0])) || ""}</div>
                     {row.__meta.subtitle && (
-                      <div className="text-xs text-slate-500">{i18nPick(row.__meta.subtitle, "pt-BR")}</div>
+                      <div className="text-xs text-slate-500">
+                        {row.__meta.subtitle["pt-BR"] || Object.values(row.__meta.subtitle)[0]}
+                      </div>
                     )}
                   </div>
                 )}
 
-                {/* row grid */}
                 <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length}, 1fr)` }}>
                   {schema.map((field) => {
                     const value = row.row?.[field.key]
@@ -440,13 +446,10 @@ export function QuestionRenderer({
                     )
                   })}
                 </div>
-
-                {/* delete button could go here when allowDelete=true (not implemented before) */}
               </div>
             )
           })}
 
-          {/* add row (dynamic only) */}
           {!locked && allowAdd && onAddTableRow && (
             <Button variant="outline" onClick={() => onAddTableRow(question.code)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
@@ -458,43 +461,4 @@ export function QuestionRenderer({
     )
   }
 
-  const renderQuestionContent = () => {
-    switch (question.type) {
-      case "boolean":
-        return renderBooleanQuestion()
-      case "single_select":
-        return renderSingleSelect()
-      case "multi_select":
-        return renderMultiSelect()
-      case "text":
-        return renderTextQuestion()
-      case "number":
-        return renderNumberQuestion()
-      case "date":
-        return renderDateQuestion()
-      case "currency":
-        return renderCurrencyQuestion()
-      case "attachment":
-        return renderAttachmentQuestion()
-      case "table":
-        return renderTableQuestion()
-      default:
-        return (
-          <CardContent>
-            <div className="text-slate-500">Tipo de pergunta não suportado: {question.type}</div>
-          </CardContent>
-        )
-    }
-  }
-
-  return (
-    <div>
-      {renderSectionTitle()}
-      <Card className="bg-white/80 backdrop-blur-sm border-slate-200 shadow-sm">
-        {renderQuestionHeader()}
-        {renderQuestionContent()}
-      </Card>
-    </div>
-  )
-}
 
