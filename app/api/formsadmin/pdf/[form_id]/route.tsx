@@ -10,45 +10,76 @@ import FortersFormPdf, { QAItem } from "@/pdf-templates/FortersFormPdf";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** normalize: if a string contains JSON (e.g. '["Brasil"]'), parse it */
+const BUCKET = "form-uploads";
+
+/* ---------- helpers: parsing / formatting ---------- */
+
+// If a string looks like JSON, parse it.
+// Returns original value if parsing fails.
 function normalize(v: any) {
   if (typeof v === "string") {
     const s = v.trim();
-    if ((s.startsWith("{") && s.endsWith("}")) || (s.startsWith("[") && s.endsWith("]"))) {
-      try { return JSON.parse(s); } catch { /* ignore */ }
+    const looksJson =
+      (s.startsWith("{") && s.endsWith("}")) ||
+      (s.startsWith("[") && s.endsWith("]"));
+    if (looksJson) {
+      try {
+        return JSON.parse(s);
+      } catch {
+        return v;
+      }
     }
   }
   return v;
 }
 
-/** format helpers */
 function fmtBoolean(v: any) {
   const vv = normalize(v);
   const b = typeof vv === "boolean" ? vv : vv?.value ?? vv?.val;
   return b === true ? "Sim" : b === false ? "Não" : "-";
 }
+
+function arrayToStr(arr: any[]) {
+  return arr
+    .map((x) =>
+      typeof x === "string"
+        ? x
+        : x?.label ?? x?.value ?? JSON.stringify(x ?? "")
+    )
+    .join(", ");
+}
+
 function fmtArray(v: any) {
   const vv = normalize(v);
   const arr = Array.isArray(vv) ? vv : vv?.values || vv?.options || [];
-  return arr
-    .map((x) => (typeof x === "string" ? x : x?.label ?? x?.value ?? JSON.stringify(x)))
-    .join(", ");
+  return arrayToStr(arr);
 }
+
 function fmtScalar(v: any) {
   const vv = normalize(v);
   const raw = vv?.value ?? vv?.val ?? vv;
+
+  // SPECIAL: If raw is a JSON-looking string array e.g. '["brasil"]'
+  // normalize() above will already have converted it. Handle arrays here too.
+  if (Array.isArray(raw)) return arrayToStr(raw);
+
   if (raw == null) return "-";
   if (typeof raw === "number") return String(raw);
   if (typeof raw === "string") return raw;
   return JSON.stringify(raw);
 }
+
 function fmtCurrency(v: any) {
   const vv = normalize(v);
   const amount = Number(vv?.amount ?? vv?.value ?? vv);
   if (Number.isFinite(amount))
-    return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    return amount.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
   return fmtScalar(v);
 }
+
 function fmtDate(v: any) {
   const vv = normalize(v);
   const iso = vv?.date ?? vv?.value ?? vv;
@@ -56,19 +87,58 @@ function fmtDate(v: any) {
   return d && !isNaN(+d) ? d.toLocaleDateString("pt-BR") : fmtScalar(v);
 }
 
-/** Convert a table row object into a compact line "Col1: v | Col2: v" */
-function tableRowToLine(rowObj: Record<string, any>) {
+/** Build a pretty line for a table row using column labels from config_json. */
+function rowToPrettyLine(
+  rowObj: Record<string, any>,
+  colLabelByKey: Record<string, string>
+) {
   const pairs = Object.entries(rowObj || {}).map(([k, val]) => {
-    const v =
-      typeof val === "string" || typeof val === "number"
-        ? String(val)
-        : Array.isArray(val)
-        ? val.join(", ")
-        : val?.label ?? val?.value ?? JSON.stringify(val ?? "");
-    return `${k}: ${v}`;
+    const label = colLabelByKey[k] || k;
+    const vv = normalize(val);
+    let printable: string;
+
+    if (Array.isArray(vv)) printable = arrayToStr(vv);
+    else if (typeof vv === "object" && vv !== null) printable = fmtScalar(vv);
+    else printable = String(vv ?? "-");
+
+    return `${label}: ${printable}`;
   });
   return pairs.join(" | ");
 }
+
+/* ---------- storage helpers for attachments ---------- */
+
+async function listAllFromStorage(prefix: string) {
+  // normalize prefix
+  let base = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
+  if (base) base += "/";
+
+  const out: { path: string; name: string }[] = [];
+
+  async function walk(dir: string) {
+    const { data, error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .list(dir, { limit: 1000, offset: 0, sortBy: { column: "name", order: "asc" } });
+    if (error) return;
+
+    for (const item of data || []) {
+      if ((item as any).id) {
+        // file
+        const full = (base + (dir ? dir + "/" : "") + item.name).replace(/\/+/g, "/");
+        out.push({ path: full, name: item.name });
+      } else {
+        // folder
+        const next = (dir ? dir + "/" : "") + item.name;
+        await walk(next);
+      }
+    }
+  }
+
+  await walk("");
+  return out;
+}
+
+/* ------------------- main handler ------------------- */
 
 export async function POST(
   req: Request,
@@ -92,7 +162,7 @@ export async function POST(
       return NextResponse.json({ error: formErr?.message || "form_not_found" }, { status: 404 });
     }
 
-    // 2) template (to show a human-friendly "formName")
+    // 2) template (for human form name)
     const { data: tpl } = await supabaseAdmin
       .from("form_templates")
       .select("slug, product_code, industry_code, version")
@@ -105,15 +175,15 @@ export async function POST(
       tpl?.slug ||
       "Formulário";
 
-    // 3) questions
+    // 3) questions (grab config_json to resolve table column labels)
     const { data: questions, error: qErr } = await supabaseAdmin
       .from("template_questions")
-      .select("id, order, label_json, type")
+      .select("id, order, label_json, type, config_json")
       .eq("template_id", form.template_id)
       .order("order", { ascending: true });
     if (qErr) return NextResponse.json({ error: qErr.message }, { status: 500 });
 
-    // 4) answers (schema has only value_json)
+    // 4) answers (schema uses value_json)
     const { data: answers, error: aErr } = await supabaseAdmin
       .from("form_answers")
       .select("question_id, value_json")
@@ -126,11 +196,22 @@ export async function POST(
       .select("question_id, row_index, row_json")
       .eq("form_id", formId);
 
-    // 6) attachments
-    const { data: files } = await supabaseAdmin
+    // 6) attachments (prefer DB; if none, look in Storage under <prefix>/<formId>/…)
+    const { data: filesDb } = await supabaseAdmin
       .from("form_files")
-      .select("filename")
+      .select("filename, storage_path")
       .eq("form_id", formId);
+
+    let attachments: { filename: string }[] = [];
+    if (filesDb && filesDb.length > 0) {
+      attachments = filesDb.map((f) => ({ filename: f.filename || (f.storage_path?.split("/").pop() || "") }));
+    } else {
+      // optional fallback: if DB empty, try storage listing
+      const base = (process.env.STORAGE_FORMS_PREFIX || "").trim();
+      const prefix = base ? `${base}/${formId}` : `${formId}`;
+      const listed = await listAllFromStorage(prefix);
+      attachments = listed.map((x) => ({ filename: x.name }));
+    }
 
     // maps
     const answerMap = new Map<number, any>();
@@ -143,7 +224,33 @@ export async function POST(
       tableMap.set(r.question_id, list);
     }
 
-    // 7) Build Q&A
+    // Build a map of table column labels by question_id -> { key: label }
+    const tableColLabel: Record<number, Record<string, string>> = {};
+    for (const q of questions || []) {
+      if ((q as any).type !== "table") continue;
+      const cfg = (q as any).config_json || {};
+      let columns: any[] = [];
+      // We accept either config_json.columns or config_json.table?.columns
+      if (Array.isArray((cfg as any).columns)) columns = (cfg as any).columns;
+      if (Array.isArray((cfg as any).table?.columns)) columns = (cfg as any).table.columns;
+
+      const byKey: Record<string, string> = {};
+      for (const c of columns) {
+        const key = c?.key || c?.field || c?.code;
+        const labelJson = c?.label_json || c?.label || {};
+        const label =
+          typeof labelJson === "object"
+            ? labelJson[form.language] ||
+              labelJson["pt-BR"] ||
+              labelJson["en"] ||
+              labelJson["es-419"]
+            : String(labelJson ?? key);
+        if (key) byKey[key] = label;
+      }
+      tableColLabel[(q as any).id] = byKey;
+    }
+
+    // 7) Build Q&A rows with correct formatting
     const qaItems: QAItem[] = (questions || []).map((q: any) => {
       const label =
         typeof q.label_json === "object"
@@ -160,34 +267,45 @@ export async function POST(
         case "boolean":
           answerStr = fmtBoolean(val);
           break;
+
         case "one_choice":
         case "oneChoice":
         case "select":
         case "radio":
           answerStr = fmtScalar(val);
           break;
+
         case "multiple_choice":
         case "multipleChoice":
         case "checkbox":
-          answerStr = fmtArray(val); // ensures ["Brasil"] -> Brasil
+          answerStr = fmtArray(val);
           break;
+
         case "date":
           answerStr = fmtDate(val);
           break;
+
         case "currency":
           answerStr = fmtCurrency(val);
           break;
+
         case "number":
           answerStr = fmtScalar(val);
           break;
+
         case "text":
         case "long_text":
         case "longText":
           answerStr = fmtScalar(val);
           break;
+
         case "attachment":
-          answerStr = "Ver seção de anexos na capa";
+          // we show them on the cover; keep a hint here
+          answerStr = attachments.length
+            ? `${attachments.length} arquivo(s) enviado(s)`
+            : "Sem anexos";
           break;
+
         case "table": {
           const rows = (tableMap.get(q.id) || []).sort(
             (a: any, b: any) => (a.row_index ?? 0) - (b.row_index ?? 0)
@@ -195,16 +313,19 @@ export async function POST(
           if (!rows.length) {
             answerStr = "-";
           } else {
+            const colMap = tableColLabel[q.id] || {};
             const lines = rows.map((r) => {
               const obj =
                 typeof r.row_json === "string" ? normalize(r.row_json) : r.row_json || {};
-              return `• ${tableRowToLine(obj as Record<string, any>)}`;
+              return `• ${rowToPrettyLine(obj as Record<string, any>, colMap)}`;
             });
-            answerStr = lines.join("\n"); // 👈 multiline text inside the cell
+            answerStr = lines.join("\n");
           }
           break;
         }
+
         default:
+          // catch-all still cleans JSON-looking arrays like '["Brasil"]'
           answerStr = fmtScalar(val);
       }
 
@@ -215,31 +336,31 @@ export async function POST(
       };
     });
 
-    // 8) logo
+    // 8) Logo
     let logoDataUrl = "";
     try {
       const logoPath = path.join(process.cwd(), "public", "forters-logo.jpeg");
       const bytes = await fs.readFile(logoPath);
       logoDataUrl = `data:image/jpeg;base64,${bytes.toString("base64")}`;
-    } catch { /* ignore */ }
+    } catch {}
 
-    // 9) broker info
+    // 9) Broker info
     const brokerInfo = {
       name: "Forters Corretora de Seguros LTDA",
       cnpj: "50.236.609/0001-32",
       susep: "2321454513",
     };
 
-    // 10) render
+    // 10) Render and send
     const instance = (
       <FortersFormPdf
         logoDataUrl={logoDataUrl}
         companyName={form.respondent_company || "-"}
-        formName={formName}                // 👈 show on cover
+        formName={formName}
         filledAt={form.created_at}
         brokerInfo={brokerInfo}
         qaItems={qaItems}
-        attachments={(files || []).map((f) => ({ filename: f.filename || "" }))}
+        attachments={attachments}
       />
     );
     const pdfBuffer = await pdf(instance).toBuffer();
@@ -255,4 +376,3 @@ export async function POST(
     return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
   }
 }
-
