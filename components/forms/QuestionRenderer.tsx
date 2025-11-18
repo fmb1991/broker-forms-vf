@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,24 +19,30 @@ import { Plus, Upload, FileText } from "lucide-react"
 
 type I18n = Record<string, string>
 
+type Option = { value: string; label: string; order?: number }
+
 type TableSchemaField = {
   key: string
-  type: "text" | "boolean" | "number" | "date" | "currency"
-  label?: I18n
+  // extended to support selects inside table rows
+  type: "text" | "boolean" | "number" | "date" | "currency" | "single_select"
+  label?: I18n | string
   required?: boolean
   readonly?: boolean
+  // optional for selects
+  options?: Option[]
 }
 
-type Option = { value: string; label: string; order: number }
 type TableRow = { row_index: number; row: Record<string, any> }
 
 type TableConfig = {
   currency?: string
   decimals?: number
+  // your legacy (tech E&O) format:
   table_schema?: TableSchemaField[]
+  // new format (cyber) we added in DB:
+  columns?: any[]
   max_mb?: number
   allowed?: string[]
-  // NEW for fixed tables
   mode?: "dynamic" | "fixed"
   allow_add_rows?: boolean
   allow_delete_rows?: boolean
@@ -78,9 +84,51 @@ type QuestionRendererProps = {
    Helpers
    ========================= */
 
-function i18nPick(obj?: I18n, locale = "pt-BR", fallback = "") {
+function i18nPick(obj?: I18n | string, locale = "pt-BR", fallback = "") {
   if (!obj) return fallback
+  if (typeof obj === "string") return obj
   return obj[locale] ?? obj["pt-BR"] ?? obj["en"] ?? Object.values(obj)[0] ?? fallback
+}
+
+/** Normalize table schema so we support BOTH formats:
+ *  - legacy: config.table_schema (current Tech E&O)
+ *  - new:    config.columns     (Cyber templates)
+ */
+function useNormalizedTableSchema(config?: TableConfig) {
+  return useMemo<TableSchemaField[]>(() => {
+    const cfg = config || {}
+
+    // 1) Legacy path (already used by your working Tech E&O)
+    if (Array.isArray(cfg.table_schema) && cfg.table_schema.length > 0) {
+      return cfg.table_schema
+    }
+
+    // 2) New path (columns) used by Cyber templates
+    if (Array.isArray(cfg.columns) && cfg.columns.length > 0) {
+      return cfg.columns.map((c: any) => {
+        // options may be { value, label: i18n|string }
+        const opts: Option[] | undefined = Array.isArray(c.options)
+          ? c.options.map((o: any) => ({
+              value: String(o.value),
+              label: i18nPick(o.label, "pt-BR", String(o.value)),
+            }))
+          : undefined
+
+        const field: TableSchemaField = {
+          key: String(c.key),
+          type: (String(c.type) as TableSchemaField["type"]) || "text",
+          label: c.label,
+          required: !!c.required,
+          readonly: !!c.readonly,
+          options: opts,
+        }
+        return field
+      })
+    }
+
+    // 3) nothing
+    return []
+  }, [config])
 }
 
 /* =========================
@@ -350,60 +398,64 @@ export function QuestionRenderer({
   /* ========= Tables (dynamic + fixed) ========= */
 
   const renderTableQuestion = () => {
-    const cfg = question.config || {}
-    const schema = cfg.table_schema || []
+    // Tolerant config (supports legacy table_schema AND new columns)
+    const cfg = (question.config || {}) as TableConfig
+    const schema = useNormalizedTableSchema(cfg)
     const mode: "dynamic" | "fixed" = cfg.mode ?? "dynamic"
     const allowAdd = mode !== "fixed" && (cfg.allow_add_rows ?? true)
     // const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved
 
-    // Fixed rows definition coming from config
+    // Fixed rows (legacy layout for Tech E&O)
     const fixedDefs = (cfg.table_rows || []).map((r) => ({ code: r.code, title: r.title, subtitle: r.subtitle }))
 
-    // Existing stored rows from backend (dynamicRows) might have row_index 1..N but not in order;
-    // build a lookup by row_index so we don't rely on array position.
+    // Existing stored rows from backend (dynamicRows)
     const dynamicRows = question.table_rows || []
     const byIndex = new Map<number, { row_index: number; row: Record<string, any> }>()
     for (const r of dynamicRows) byIndex.set(r.row_index, r)
 
-    // Build renderer rows:
+    // Build rows for rendering
     const rows =
       mode === "fixed"
         ? fixedDefs.map((r, idx) => {
             const row_index = idx + 1
             const match = byIndex.get(row_index)
-            return { row_index, row: match?.row || {}, __meta: r }
+            return { row_index, row: match?.row || {}, __meta: r as any }
           })
         : dynamicRows.map((r) => ({ ...r, __meta: undefined }))
 
     const fieldLabel = (field: TableSchemaField) => {
       if (!field.label) return field.key
-      return i18nPick(field.label, "pt-BR", field.key)
+      return i18nPick(field.label as any, "pt-BR", field.key)
     }
 
     return (
       <CardContent>
         <div className="space-y-4">
+          {/* If schema is empty, show a friendly hint instead of a blank card */}
+          {schema.length === 0 && (
+            <div className="text-sm text-muted-foreground">
+              Configuração de tabela sem colunas para <strong>{question.code}</strong>. Verifique se o backend envia
+              <code> config.columns </code> ou <code> config.table_schema</code>.
+            </div>
+          )}
+
           {rows.map((row) => {
             return (
               <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
                 {row.__meta && (
                   <div className="mb-1">
-                    <div className="text-sm font-medium">
-                      {i18nPick(row.__meta.title, "pt-BR")}
-                    </div>
-                    {row.__meta.subtitle && (
-                      <div className="text-xs text-slate-500">
-                        {i18nPick(row.__meta.subtitle, "pt-BR")}
-                      </div>
-                    )}
+                    <div className="text-sm font-medium">{i18nPick(row.__meta.title as any, "pt-BR")}</div>
+                    {row.__meta.subtitle && <div className="text-xs text-slate-500">{i18nPick(row.__meta.subtitle as any, "pt-BR")}</div>}
                   </div>
                 )}
 
-                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length}, 1fr)` }}>
+                <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length || 1}, 1fr)` }}>
                   {schema.map((field) => {
                     const value = row.row?.[field.key]
                     const ro = !!field.readonly
+                    const required = !!field.required
 
+                    // BOOLEAN inside table
                     if (field.type === "boolean") {
                       return (
                         <div key={`${row.row_index}-${field.key}`} className="flex items-center space-x-2">
@@ -422,9 +474,70 @@ export function QuestionRenderer({
                       )
                     }
 
+                    // SINGLE SELECT inside table (new)
+                    if (field.type === "single_select") {
+                      const opts = field.options || []
+                      return (
+                        <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
+                          <label className="text-xs font-medium mb-1">
+                            {fieldLabel(field)} {required ? <span className="text-red-500">*</span> : null}
+                          </label>
+                          <Select
+                            value={value ?? ""}
+                            onValueChange={(val) => {
+                              if (onTableRowChange) {
+                                const newRow = { ...row.row, [field.key]: val }
+                                onTableRowChange(question.code, row.row_index, newRow)
+                              }
+                            }}
+                            disabled={locked || ro}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {opts.map((op) => (
+                                <SelectItem key={op.value} value={op.value}>
+                                  {op.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )
+                    }
+
+                    // CURRENCY inside table (new) -> simple number input (no cents object)
+                    if (field.type === "currency") {
+                      return (
+                        <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
+                          <label className="text-xs font-medium mb-1">
+                            {fieldLabel(field)} {required ? <span className="text-red-500">*</span> : null}
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={value ?? ""}
+                            onChange={(e) => {
+                              if (onTableRowChange) {
+                                const newValue = e.target.value === "" ? null : Number(e.target.value)
+                                const newRow = { ...row.row, [field.key]: newValue }
+                                onTableRowChange(question.code, row.row_index, newRow)
+                              }
+                            }}
+                            disabled={locked || ro}
+                            className="text-sm"
+                          />
+                        </div>
+                      )
+                    }
+
+                    // NUMBER / DATE / TEXT (existing)
                     return (
                       <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
-                        <label className="text-xs font-medium mb-1">{fieldLabel(field)}</label>
+                        <label className="text-xs font-medium mb-1">
+                          {fieldLabel(field)} {required ? <span className="text-red-500">*</span> : null}
+                        </label>
                         <Input
                           type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
                           value={value ?? ""}
@@ -497,4 +610,3 @@ export function QuestionRenderer({
     </div>
   )
 }
-
