@@ -29,6 +29,7 @@ import {
   LinkIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { FormLanguage } from "@/lib/languages";
 
 type Template = {
   id: number;
@@ -105,7 +106,10 @@ export default function AdminPage() {
             <CardContent className="pt-6">
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
-                  <Label htmlFor="admin-secret" className="text-slate-700 font-medium">
+                  <Label
+                    htmlFor="admin-secret"
+                    className="text-slate-700 font-medium"
+                  >
                     Clave del Administrador
                   </Label>
                   <Input
@@ -175,7 +179,9 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-4">
-                <Button onClick={() => setMode("templates")}>Ir a Templates</Button>
+                <Button onClick={() => setMode("templates")}>
+                  Ir a Templates
+                </Button>
               </CardContent>
             </Card>
 
@@ -244,11 +250,14 @@ function TemplatesModule({
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
-  const [lang, setLang] = useState("pt-BR");
+  const [lang, setLang] = useState<FormLanguage>("pt-BR");
   const [ttl, setTtl] = useState(60 * 24 * 30);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ form_id?: string; token?: string } | null>(null);
+  const [result, setResult] = useState<{
+    form_id?: string;
+    token?: string;
+  } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
@@ -337,7 +346,9 @@ function TemplatesModule({
     const tokenFromResponse = json?.token || "";
     const tokenFromUrl =
       tokenFromResponse ||
-      extractTokenFromUrl(`${origin}/f/${json?.form_id}?lang=${lang}&t=${json?.token}`);
+      extractTokenFromUrl(
+        `${origin}/f/${json?.form_id}?lang=${lang}&t=${json?.token}`,
+      );
     setGeneratedToken(tokenFromUrl);
 
     toast({
@@ -435,24 +446,33 @@ function TemplatesModule({
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">Painel Administrativo</h1>
-          <p className="text-slate-600">Geração de links seguros para questionários de seguros</p>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">
+            Painel Administrativo
+          </h1>
+          <p className="text-slate-600">
+            Geração de links seguros para questionários de seguros
+          </p>
         </div>
 
         <div className="space-y-6">
-          {/* Autenticación propia del módulo (dejas igual tu experiencia) */}
+          {/* Autenticación propia del módulo */}
           <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
             <CardHeader className="bg-slate-50/50">
               <CardTitle className="flex items-center gap-2 text-slate-800">
                 <Shield className="h-5 w-5 text-teal-600" />
                 Autenticação (Templates)
               </CardTitle>
-              <CardDescription>Digite sua chave secreta para acessar os templates</CardDescription>
+              <CardDescription>
+                Digite sua chave secreta para acessar os templates
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
-                  <Label htmlFor="admin-secret" className="text-slate-700 font-medium">
+                  <Label
+                    htmlFor="admin-secret"
+                    className="text-slate-700 font-medium"
+                  >
                     Chave Secreta do Administrador
                   </Label>
                   <div className="relative mt-2">
@@ -498,14 +518,22 @@ function TemplatesModule({
                     <Settings className="h-5 w-5 text-blue-600" />
                     Configuração do Questionário
                   </CardTitle>
-                  <CardDescription>Selecione o template e configure as informações da empresa</CardDescription>
+                  <CardDescription>
+                    Selecione o template e configure as informações da empresa
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
                   <div>
-                    <Label htmlFor="template-select" className="text-slate-700 font-medium">
+                    <Label
+                      htmlFor="template-select"
+                      className="text-slate-700 font-medium"
+                    >
                       Produto / Template
                     </Label>
-                    <Select value={selectedSlug} onValueChange={setSelectedSlug}>
+                    <Select
+                      value={selectedSlug}
+                      onValueChange={setSelectedSlug}
+                    >
                       <SelectTrigger className="mt-2">
                         <SelectValue placeholder="Selecione um template" />
                       </SelectTrigger>
@@ -526,7 +554,10 @@ function TemplatesModule({
                   </div>
 
                   <div>
-                    <Label htmlFor="company" className="text-slate-700 font-medium">
+                    <Label
+                      htmlFor="company"
+                      className="text-slate-700 font-medium"
+                    >
                       Nome da Empresa
                     </Label>
                     <Input
@@ -544,7 +575,10 @@ function TemplatesModule({
                     </Label>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <Label htmlFor="contact-name" className="text-sm text-slate-600">
+                        <Label
+                          htmlFor="contact-name"
+                          className="text-sm text-slate-600"
+                        >
                           Nome do Contato
                         </Label>
                         <Input
@@ -556,7 +590,10 @@ function TemplatesModule({
                         />
                       </div>
                       <div>
-                        <Label htmlFor="contact-email" className="text-sm text-slate-600">
+                        <Label
+                          htmlFor="contact-email"
+                          className="text-sm text-slate-600"
+                        >
                           Email
                         </Label>
                         <Input
@@ -569,7 +606,10 @@ function TemplatesModule({
                         />
                       </div>
                       <div>
-                        <Label htmlFor="contact-phone" className="text-sm text-slate-600">
+                        <Label
+                          htmlFor="contact-phone"
+                          className="text-sm text-slate-600"
+                        >
                           Telefone
                         </Label>
                         <Input
@@ -585,30 +625,45 @@ function TemplatesModule({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="language" className="text-slate-700 font-medium">
+                      <Label
+                        htmlFor="language"
+                        className="text-slate-700 font-medium"
+                      >
                         Idioma do Questionário
                       </Label>
-                      <Select value={lang} onValueChange={setLang}>
+                      <Select
+                        value={lang}
+                        onValueChange={(value) =>
+                          setLang(value as FormLanguage)
+                        }
+                      >
                         <SelectTrigger className="mt-2">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pt-BR">Português (Brasil)</SelectItem>
-                          <SelectItem value="es-419">Español (LatAm)</SelectItem>
+                          <SelectItem value="pt-BR">
+                            Português (Brasil)
+                          </SelectItem>
+                          <SelectItem value="es">Español</SelectItem>
                           <SelectItem value="en">English</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div>
-                      <Label htmlFor="ttl" className="text-slate-700 font-medium">
+                      <Label
+                        htmlFor="ttl"
+                        className="text-slate-700 font-medium"
+                      >
                         Validade (minutos)
                       </Label>
                       <Input
                         id="ttl"
                         type="number"
                         value={ttl}
-                        onChange={(e) => setTtl(Number(e.target.value || 0))}
+                        onChange={(e) =>
+                          setTtl(Number(e.target.value || 0))
+                        }
                         className="mt-2"
                         min="1"
                       />
@@ -630,7 +685,9 @@ function TemplatesModule({
                 <CardContent className="pt-6">
                   <Button
                     onClick={createLink}
-                    disabled={!selectedSlug || !company || !adminSecret || creating}
+                    disabled={
+                      !selectedSlug || !company || !adminSecret || creating
+                    }
                     className="bg-orange-600 hover:bg-orange-700 text-white w-full md:w-auto"
                     size="lg"
                   >
@@ -648,7 +705,9 @@ function TemplatesModule({
                   <LinkIcon className="h-5 w-5 text-green-600" />
                   Link Gerado com Sucesso
                 </CardTitle>
-                <CardDescription>Compartilhe este link seguro com o cliente</CardDescription>
+                <CardDescription>
+                  Compartilhe este link seguro com o cliente
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
                 <div className="space-y-6">
@@ -662,7 +721,11 @@ function TemplatesModule({
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-3">
-                    <Button onClick={copyUrl} variant="outline" className="flex items-center gap-2 bg-transparent">
+                    <Button
+                      onClick={copyUrl}
+                      variant="outline"
+                      className="flex items-center gap-2 bg-transparent"
+                    >
                       <Copy className="h-4 w-4" />
                       Copiar URL
                     </Button>
@@ -696,7 +759,9 @@ function TemplatesModule({
                       <Button
                         type="button"
                         onClick={saveHubspotDeal}
-                        disabled={!generatedToken || !hubspotDealId || savingDeal}
+                        disabled={
+                          !generatedToken || !hubspotDealId || savingDeal
+                        }
                         className="bg-orange-600 hover:bg-orange-700 text-white"
                       >
                         {savingDeal ? "Salvando..." : "Salvar Deal ID"}
@@ -705,7 +770,8 @@ function TemplatesModule({
 
                     {!generatedToken && (
                       <p className="text-xs text-amber-600 mt-2">
-                        Gere o link primeiro para capturar o token e permitir o salvamento do Deal ID.
+                        Gere o link primeiro para capturar o token e permitir o
+                        salvamento do Deal ID.
                       </p>
                     )}
                   </div>
@@ -863,7 +929,9 @@ function FormsModule({
                   {new Date(r.created_at).toLocaleDateString()}
                 </td>
                 <td className="p-2">
-                  {r.due_at ? new Date(r.due_at).toLocaleDateString() : "-"}
+                  {r.due_at
+                    ? new Date(r.due_at).toLocaleDateString()
+                    : "-"}
                 </td>
                 <td className="p-2 space-x-2">
                   <button
@@ -887,4 +955,3 @@ function FormsModule({
     </div>
   );
 }
-
