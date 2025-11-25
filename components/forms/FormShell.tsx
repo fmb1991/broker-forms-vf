@@ -12,19 +12,8 @@ type FormShellProps = {
   children: React.ReactNode
   onSubmit: () => void
   submitting: boolean
-  /** Language from URL, e.g. "pt-BR", "es", "es-419", "en" */
+  // NEW: pass current language
   lang?: string
-}
-
-function normalizeLang(lang?: string): "pt-BR" | "es-419" | "en" {
-  if (!lang) return "pt-BR"
-  const lower = lang.toLowerCase()
-
-  if (lower.startsWith("pt")) return "pt-BR"
-  if (lower.startsWith("es")) return "es-419"
-  if (lower.startsWith("en")) return "en"
-
-  return "pt-BR"
 }
 
 export function FormShell({
@@ -33,36 +22,54 @@ export function FormShell({
   children,
   onSubmit,
   submitting,
-  lang,
+  lang = "pt-BR",
 }: FormShellProps) {
   const locked = status === "submitted"
-  const langNorm = normalizeLang(lang)
 
-  // ---- i18n strings ----
-  let title = "Questionário de Seguros"
-  let companyLabel = "Empresa"
-  let submittedLabel = "Enviado"
-  let btnIdle = "Enviar Questionário"
-  let btnSubmitting = "Enviando..."
-  let btnSubmitted = "Enviado"
+  const langNorm = lang.toLowerCase()
 
-  if (langNorm === "es-419") {
-    title = "Cuestionario de Seguros"
-    companyLabel = "Empresa"
-    submittedLabel = "Enviado"
-    btnIdle = "Enviar cuestionario"
-    btnSubmitting = "Enviando..."
-    btnSubmitted = "Enviado"
-  } else if (langNorm === "en") {
-    title = "Insurance Form"
-    companyLabel = "Company"
-    submittedLabel = "Submitted"
-    btnIdle = "Submit form"
-    btnSubmitting = "Submitting..."
-    btnSubmitted = "Submitted"
+  function getTitle() {
+    if (langNorm.startsWith("en")) return "Insurance Form"
+    if (langNorm === "es" || langNorm === "es-419") return "Cuestionario de Seguros"
+    return "Questionário de Seguros"
   }
 
-  const buttonLabel = locked ? btnSubmitted : submitting ? btnSubmitting : btnIdle
+  function getButtonLabel() {
+    if (locked) {
+      if (langNorm.startsWith("en")) return "Submitted"
+      if (langNorm === "es" || langNorm === "es-419") return "Enviado"
+      return "Enviado"
+    }
+
+    if (submitting) {
+      if (langNorm.startsWith("en")) return "Submitting..."
+      if (langNorm === "es" || langNorm === "es-419") return "Enviando..."
+      return "Enviando..."
+    }
+
+    // default labels when NOT submitted
+    if (langNorm.startsWith("en")) return "Submit form"
+    if (langNorm === "es" || langNorm === "es-419") return "Enviar cuestionario"
+    return "Enviar Questionário"
+  }
+
+  function getCompanyLabel() {
+    if (langNorm.startsWith("en")) return "Company:"
+    if (langNorm === "es" || langNorm === "es-419") return "Empresa:"
+    return "Empresa:"
+  }
+
+  function getNotInformed() {
+    if (langNorm.startsWith("en")) return "Not informed"
+    if (langNorm === "es" || langNorm === "es-419") return "No informada"
+    return "Não informada"
+  }
+
+  function getSentBadge() {
+    if (langNorm.startsWith("en")) return "Submitted"
+    if (langNorm === "es" || langNorm === "es-419") return "Enviado"
+    return "Enviado"
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -84,15 +91,15 @@ export function FormShell({
       {/* Main content */}
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">{title}</h1>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">{getTitle()}</h1>
           <div className="flex items-center justify-center gap-2 text-slate-600">
             <span>
-              {companyLabel}: {company || "Não informada"}
+              {getCompanyLabel()} {company || getNotInformed()}
             </span>
             {locked && (
               <div className="flex items-center gap-1 text-green-600 font-medium">
                 <CheckCircle className="h-4 w-4" />
-                <span>{submittedLabel}</span>
+                <span>{getSentBadge()}</span>
               </div>
             )}
           </div>
@@ -111,7 +118,7 @@ export function FormShell({
                 size="lg"
                 className="bg-orange-600 hover:bg-orange-700 text-white min-w-32"
               >
-                {buttonLabel}
+                {getButtonLabel()}
               </Button>
             </div>
           </div>
@@ -120,3 +127,4 @@ export function FormShell({
     </div>
   )
 }
+
