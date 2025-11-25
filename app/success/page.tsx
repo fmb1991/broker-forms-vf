@@ -1,8 +1,7 @@
-"use client";
+// app/success/page.tsx
 
-import Link from "next/link";
-import FooterForters from "@/components/FooterForters";
 import Image from "next/image";
+import FooterForters from "@/components/FooterForters";
 
 export const metadata = {
   title: "Success — Forters",
@@ -17,7 +16,7 @@ function normalizeLang(raw?: string): "pt" | "es" | "en" {
   if (v.startsWith("en")) return "en";
   if (v.startsWith("es")) return "es";
 
-  return "pt";
+  return "pt"; // default Portuguese
 }
 
 // Full translations
@@ -30,11 +29,14 @@ const TEXT = {
     s1Desc: "Preencha o formulário e envie os documentos.",
     s2Title: "Cotação",
     s2Sub: "(você está aqui)",
-    s2Desc: "Buscaremos, junto às seguradoras parceiras, a melhor opção de cobertura para sua empresa.",
+    s2Desc:
+      "Buscaremos, junto às seguradoras parceiras, a melhor opção de cobertura para sua empresa.",
     s3Title: "Aprovação de cobertura e condições",
-    s3Desc: "Você escolherá a proposta que melhor atende às suas necessidades de limite e coberturas.",
+    s3Desc:
+      "Você escolherá a proposta que melhor atende às suas necessidades de limite e coberturas.",
     s4Title: "Renovação da apólice",
-    s4Desc: "Formalizaremos a contratação e sua cobertura será renovada, garantindo proteção contínua.",
+    s4Desc:
+      "Formalizaremos a contratação e sua cobertura será renovada, garantindo proteção contínua.",
     visit: "Visite-nos para mais informações"
   },
 
@@ -46,11 +48,13 @@ const TEXT = {
     s1Desc: "Completa el formulario y envía los documentos.",
     s2Title: "Cotización",
     s2Sub: "(estás aquí)",
-    s2Desc: "Buscaremos junto a las aseguradoras asociadas la mejor opción de cobertura para tu empresa.",
+    s2Desc:
+      "Buscaremos junto a las aseguradoras asociadas la mejor opción de cobertura para tu empresa.",
     s3Title: "Aprobación de coberturas y condiciones",
     s3Desc: "Elegirás la propuesta que mejor se adapte a tus necesidades.",
     s4Title: "Renovación de la póliza",
-    s4Desc: "Formalizaremos la contratación y tu cobertura será renovada.",
+    s4Desc:
+      "Formalizaremos la contratación y tu cobertura será renovada para mantener tu empresa protegida.",
     visit: "Visítanos para más información"
   },
 
@@ -62,11 +66,14 @@ const TEXT = {
     s1Desc: "Fill out the form and upload the required documents.",
     s2Title: "Underwriting",
     s2Sub: "(you are here)",
-    s2Desc: "We will work with our partner insurers to find the best coverage options for your business.",
+    s2Desc:
+      "We will work with our partner insurers to find the best coverage options for your business.",
     s3Title: "Coverage review & approval",
-    s3Desc: "You will choose the proposal that best fits your limits and coverage needs.",
+    s3Desc:
+      "You will choose the proposal that best fits your limits and coverage needs.",
     s4Title: "Policy renewal",
-    s4Desc: "We will finalize the contract and ensure your coverage is renewed and active.",
+    s4Desc:
+      "We will finalize the contract and ensure your coverage is renewed and active.",
     visit: "Visit us for more information"
   }
 };
@@ -84,7 +91,13 @@ export default function SuccessPage({
       {/* Header */}
       <header className="bg-white w-full">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-center">
-          <Image src="/forters-logo.jpeg" alt="Forters" width={180} height={70} className="h-14" />
+          <Image
+            src="/forters-logo.jpeg"
+            alt="Forters"
+            width={180}
+            height={70}
+            className="h-14"
+          />
         </div>
       </header>
 
@@ -98,10 +111,11 @@ export default function SuccessPage({
 
         {/* Steps card */}
         <section className="bg-[#263644] rounded-xl p-8 text-left shadow-md">
-          <h2 className="text-center text-xl font-semibold text-white mb-6">{t.stepsTitle}</h2>
+          <h2 className="text-center text-xl font-semibold text-white mb-6">
+            {t.stepsTitle}
+          </h2>
 
           <ol className="space-y-6">
-
             {/* Step 1 */}
             <li className="flex items-start gap-6">
               <div className="flex-shrink-0">
@@ -175,3 +189,4 @@ export default function SuccessPage({
     </div>
   );
 }
+
