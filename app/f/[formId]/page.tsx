@@ -8,6 +8,32 @@ import { supabase } from "../../../lib/supabaseClient"
 import { FormShell } from "../../../components/forms/FormShell"
 import { QuestionRenderer } from "../../../components/forms/QuestionRenderer"
 
+/** ---------- Simple UI i18n for form shell ---------- */
+const FORM_UI_TEXT = {
+  "pt-BR": {
+    title: "Questionário de Seguros",
+    companyLabel: "Empresa:",
+    submit: "Enviar Questionário",
+  },
+  "es-419": {
+    title: "Cuestionario de Seguros",
+    companyLabel: "Empresa:",
+    submit: "Enviar cuestionario",
+  },
+  en: {
+    title: "Insurance Questionnaire",
+    companyLabel: "Company:",
+    submit: "Submit questionnaire",
+  },
+} as const
+
+type LangCode = keyof typeof FORM_UI_TEXT
+
+function pickFormUiText(lang: string | null): (typeof FORM_UI_TEXT)[LangCode] {
+  const code = (lang || "pt-BR") as LangCode
+  return FORM_UI_TEXT[code] ?? FORM_UI_TEXT["pt-BR"]
+}
+
 /** ---------- Types ---------- */
 type TableSchemaField = {
   key: string
@@ -100,6 +126,9 @@ export default function FormPage({
   // URL params
   const lang = ((searchParams?.lang as string) ?? "pt-BR").toString()
   const token = ((searchParams?.t as string) ?? "").toString()
+
+  // UI text based on lang
+  const ui = pickFormUiText(lang)
 
   // State
   const [payload, setPayload] = useState<Payload | null>(null)
@@ -272,6 +301,10 @@ export default function FormPage({
       status={payload.form.status}
       onSubmit={submitForm}
       submitting={submitting}
+      /* new props for i18n UI */
+      title={ui.title}
+      companyLabel={ui.companyLabel}
+      submitLabel={ui.submit}
     >
       {payload.questions.map((question, index) => (
         <QuestionRenderer
