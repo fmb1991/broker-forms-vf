@@ -12,11 +12,19 @@ type FormShellProps = {
   children: React.ReactNode
   onSubmit: () => void
   submitting: boolean
+  /** Language from URL, e.g. "pt-BR", "es", "es-419", "en" */
+  lang?: string
+}
 
-  // 🔥 NEW i18n Props
-  title: string
-  companyLabel: string
-  submitLabel: string
+function normalizeLang(lang?: string): "pt-BR" | "es-419" | "en" {
+  if (!lang) return "pt-BR"
+  const lower = lang.toLowerCase()
+
+  if (lower.startsWith("pt")) return "pt-BR"
+  if (lower.startsWith("es")) return "es-419"
+  if (lower.startsWith("en")) return "en"
+
+  return "pt-BR"
 }
 
 export function FormShell({
@@ -25,13 +33,36 @@ export function FormShell({
   children,
   onSubmit,
   submitting,
-
-  // NEW i18n props
-  title,
-  companyLabel,
-  submitLabel,
+  lang,
 }: FormShellProps) {
   const locked = status === "submitted"
+  const langNorm = normalizeLang(lang)
+
+  // ---- i18n strings ----
+  let title = "Questionário de Seguros"
+  let companyLabel = "Empresa"
+  let submittedLabel = "Enviado"
+  let btnIdle = "Enviar Questionário"
+  let btnSubmitting = "Enviando..."
+  let btnSubmitted = "Enviado"
+
+  if (langNorm === "es-419") {
+    title = "Cuestionario de Seguros"
+    companyLabel = "Empresa"
+    submittedLabel = "Enviado"
+    btnIdle = "Enviar cuestionario"
+    btnSubmitting = "Enviando..."
+    btnSubmitted = "Enviado"
+  } else if (langNorm === "en") {
+    title = "Insurance Form"
+    companyLabel = "Company"
+    submittedLabel = "Submitted"
+    btnIdle = "Submit form"
+    btnSubmitting = "Submitting..."
+    btnSubmitted = "Submitted"
+  }
+
+  const buttonLabel = locked ? btnSubmitted : submitting ? btnSubmitting : btnIdle
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -53,20 +84,15 @@ export function FormShell({
       {/* Main content */}
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="text-center mb-8">
-          {/* 🔥 Dynamic Title */}
           <h1 className="text-3xl font-bold text-slate-800 mb-2">{title}</h1>
-
-          {/* 🔥 Dynamic Company Label */}
           <div className="flex items-center justify-center gap-2 text-slate-600">
             <span>
-              {companyLabel} {company || "—"}
+              {companyLabel}: {company || "Não informada"}
             </span>
-
-            {/* Submitted badge */}
             {locked && (
               <div className="flex items-center gap-1 text-green-600 font-medium">
                 <CheckCircle className="h-4 w-4" />
-                <span>Enviado</span>
+                <span>{submittedLabel}</span>
               </div>
             )}
           </div>
@@ -85,11 +111,7 @@ export function FormShell({
                 size="lg"
                 className="bg-orange-600 hover:bg-orange-700 text-white min-w-32"
               >
-                {locked
-                  ? "Enviado"
-                  : submitting
-                  ? "Enviando..."
-                  : submitLabel /* 🔥 Dynamic button text */}
+                {buttonLabel}
               </Button>
             </div>
           </div>
