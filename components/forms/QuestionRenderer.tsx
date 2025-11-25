@@ -2,6 +2,8 @@
 
 import type React from "react"
 import { useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import type { FormLanguage } from "@/lib/languages"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,8 +63,8 @@ type Question = {
     | "number"
     | "attachment"
     | "table"
-  label: string
-  help?: string
+  label: I18n | string
+  help?: I18n | string
   config?: TableConfig
   options?: Option[]
   answer: any
@@ -84,7 +86,7 @@ type QuestionRendererProps = {
    Helpers
    ========================= */
 
-function i18nPick(obj?: I18n | string, locale = "pt-BR", fallback = "") {
+function i18nPick(obj: I18n | string | undefined, locale: string = "pt-BR", fallback = "") {
   if (!obj) return fallback
   if (typeof obj === "string") return obj
   return obj[locale] ?? obj["pt-BR"] ?? obj["en"] ?? Object.values(obj)[0] ?? fallback
@@ -94,7 +96,7 @@ function i18nPick(obj?: I18n | string, locale = "pt-BR", fallback = "") {
  *  - legacy: config.table_schema (current Tech E&O)
  *  - new:    config.columns     (Cyber templates)
  */
-function useNormalizedTableSchema(config?: TableConfig) {
+function useNormalizedTableSchema(config: TableConfig | undefined, locale: string) {
   return useMemo<TableSchemaField[]>(() => {
     const cfg = config || {}
 
@@ -110,7 +112,7 @@ function useNormalizedTableSchema(config?: TableConfig) {
         const opts: Option[] | undefined = Array.isArray(c.options)
           ? c.options.map((o: any) => ({
               value: String(o.value),
-              label: i18nPick(o.label, "pt-BR", String(o.value)),
+              label: i18nPick(o.label, locale, String(o.value)),
             }))
           : undefined
 
@@ -128,7 +130,7 @@ function useNormalizedTableSchema(config?: TableConfig) {
 
     // 3) nothing
     return []
-  }, [config])
+  }, [config, locale])
 }
 
 /* =========================
@@ -147,6 +149,11 @@ export function QuestionRenderer({
 }: QuestionRendererProps) {
   const [uploadBusy, setUploadBusy] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // language from ?lang= in the URL (pt-BR / en / es)
+  const searchParams = useSearchParams()
+  const langParam = (searchParams?.get("lang") as FormLanguage | null) || null
+  const locale: FormLanguage | "pt-BR" = langParam || "pt-BR"
 
   const renderSectionTitle = () => {
     if (!sectionTitle) return null
@@ -173,8 +180,14 @@ export function QuestionRenderer({
           {questionNumber}
         </Badge>
         <div className="flex-1">
-          <CardTitle className="text-lg font-semibold text-slate-800 leading-relaxed">{question.label}</CardTitle>
-          {question.help && <p className="text-sm text-slate-600 mt-2 leading-relaxed">{question.help}</p>}
+          <CardTitle className="text-lg font-semibold text-slate-800 leading-relaxed">
+            {i18nPick(question.label, locale)}
+          </CardTitle>
+          {question.help && (
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              {i18nPick(question.help, locale)}
+            </p>
+          )}
         </div>
       </div>
     </CardHeader>
@@ -182,29 +195,75 @@ export function QuestionRenderer({
 
   /* ========= Scalars ========= */
 
-  const renderBooleanQuestion = () => (
-    <CardContent>
-      <RadioGroup
-        value={question.answer === true ? "true" : question.answer === false ? "false" : ""}
-        onValueChange={(value) => onAnswerChange(question.code, value === "true")}
-        disabled={locked}
-        className="flex gap-6"
-      >
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="true" id={`${question.code}-true`} />
-          <Label htmlFor={`${question.code}-true`} className="font-medium text-slate-700">
-            Sim
+  // Boolean answer with optional details text
+  const renderBooleanQuestion = () => {
+    const raw = question.answer
+    const boolValue: boolean | null =
+      raw && typeof raw === "object" ? (raw.value ?? null) : raw === true ? true : raw === false ? false : null
+    const details: string =
+      raw && typeof raw === "object" ? (raw.details ?? "") : ""
+
+    return (
+      <CardContent className="space-y-4">
+        <RadioGroup
+          value={boolValue === true ? "true" : boolValue === false ? "false" : ""}
+          onValueChange={(value) => {
+            const newBool = value === "true"
+            const rawCurrent = question.answer
+            const currentDetails =
+              rawCurrent && typeof rawCurrent === "object" ? (rawCurrent.details ?? "") : ""
+            onAnswerChange(question.code, {
+              value: newBool,
+              details: currentDetails,
+            })
+          }}
+          disabled={locked}
+          className="flex gap-6"
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="true" id={`${question.code}-true`} />
+            <Label htmlFor={`${question.code}-true`} className="font-medium text-slate-700">
+              Sim
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="false" id={`${question.code}-false`} />
+            <Label htmlFor={`${question.code}-false`} className="font-medium text-slate-700">
+              Não
+            </Label>
+          </div>
+        </RadioGroup>
+
+        <div>
+          <Label htmlFor={`${question.code}-details`} className="text-sm text-slate-700">
+            Comentários adicionais (opcional)
           </Label>
+          <Textarea
+            id={`${question.code}-details`}
+            value={details}
+            onChange={(e) => {
+              const rawCurrent = question.answer
+              const currentBool: boolean | null =
+                rawCurrent && typeof rawCurrent === "object"
+                  ? rawCurrent.value ?? null
+                  : rawCurrent === true
+                  ? true
+                  : rawCurrent === false
+                  ? false
+                  : null
+              onAnswerChange(question.code, {
+                value: currentBool,
+                details: e.target.value,
+              })
+            }}
+            placeholder="Se desejar, explique ou detalhe sua resposta..."
+            disabled={locked}
+            className="mt-2 min-h-20 resize-none"
+          />
         </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="false" id={`${question.code}-false`} />
-          <Label htmlFor={`${question.code}-false`} className="font-medium text-slate-700">
-            Não
-          </Label>
-        </div>
-      </RadioGroup>
-    </CardContent>
-  )
+      </CardContent>
+    )
+  }
 
   const renderSingleSelect = () => (
     <CardContent>
@@ -281,7 +340,12 @@ export function QuestionRenderer({
 
   const renderDateQuestion = () => (
     <CardContent>
-      <Input type="date" value={(question.answer as string) || ""} onChange={(e) => onAnswerChange(question.code, e.target.value)} disabled={locked} />
+      <Input
+        type="date"
+        value={(question.answer as string) || ""}
+        onChange={(e) => onAnswerChange(question.code, e.target.value)}
+        disabled={locked}
+      />
     </CardContent>
   )
 
@@ -375,13 +439,21 @@ export function QuestionRenderer({
               <Upload className="h-4 w-4" />
               {uploadBusy ? "Enviando..." : "Selecionar Arquivo"}
             </Button>
-            <input id={`file-${question.code}`} type="file" onChange={handleFileSelect} className="hidden" disabled={locked || uploadBusy} />
+            <input
+              id={`file-${question.code}`}
+              type="file"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={locked || uploadBusy}
+            />
           </div>
 
           {question.answer?.filename && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
               <FileText className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-800">Arquivo enviado: {question.answer.filename}</span>
+              <span className="text-sm font-medium text-green-800">
+                Arquivo enviado: {question.answer.filename}
+              </span>
             </div>
           )}
 
@@ -400,7 +472,7 @@ export function QuestionRenderer({
   const renderTableQuestion = () => {
     // Tolerant config (supports legacy table_schema AND new columns)
     const cfg = (question.config || {}) as TableConfig
-    const schema = useNormalizedTableSchema(cfg)
+    const schema = useNormalizedTableSchema(cfg, locale)
     const mode: "dynamic" | "fixed" = cfg.mode ?? "dynamic"
     const allowAdd = mode !== "fixed" && (cfg.allow_add_rows ?? true)
     // const allowDelete = mode !== "fixed" && (cfg.allow_delete_rows ?? true) // reserved
@@ -425,7 +497,7 @@ export function QuestionRenderer({
 
     const fieldLabel = (field: TableSchemaField) => {
       if (!field.label) return field.key
-      return i18nPick(field.label as any, "pt-BR", field.key)
+      return i18nPick(field.label as any, locale, field.key)
     }
 
     return (
@@ -444,8 +516,14 @@ export function QuestionRenderer({
               <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
                 {row.__meta && (
                   <div className="mb-1">
-                    <div className="text-sm font-medium">{i18nPick(row.__meta.title as any, "pt-BR")}</div>
-                    {row.__meta.subtitle && <div className="text-xs text-slate-500">{i18nPick(row.__meta.subtitle as any, "pt-BR")}</div>}
+                    <div className="text-sm font-medium">
+                      {i18nPick(row.__meta.title as any, locale)}
+                    </div>
+                    {row.__meta.subtitle && (
+                      <div className="text-xs text-slate-500">
+                        {i18nPick(row.__meta.subtitle as any, locale)}
+                      </div>
+                    )}
                   </div>
                 )}
 
