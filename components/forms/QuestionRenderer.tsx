@@ -256,7 +256,7 @@ export function QuestionRenderer({
                 details: e.target.value,
               })
             }}
-            placeholder="Se desejar, explique ou detalhe sua resposta..."
+            placeholder="Details"
             disabled={locked}
             className="mt-2 min-h-20 resize-none"
           />
@@ -269,7 +269,7 @@ export function QuestionRenderer({
     <CardContent>
       <Select value={question.answer || ""} onValueChange={(value) => onAnswerChange(question.code, value)} disabled={locked}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="Selecione uma opção" />
+          <SelectValue placeholder="Select" />
         </SelectTrigger>
         <SelectContent>
           {(question.options || []).map((option) => (
@@ -316,7 +316,7 @@ export function QuestionRenderer({
       <Textarea
         value={(question.answer as string) || ""}
         onChange={(e) => onAnswerChange(question.code, e.target.value)}
-        placeholder="Digite sua resposta..."
+        placeholder="Type"
         disabled={locked}
         className="min-h-24 resize-none"
       />
@@ -332,7 +332,7 @@ export function QuestionRenderer({
           const value = e.target.value === "" ? null : Number(e.target.value)
           onAnswerChange(question.code, value)
         }}
-        placeholder="Digite um número"
+        placeholder="Número"
         disabled={locked}
       />
     </CardContent>
@@ -437,7 +437,7 @@ export function QuestionRenderer({
               onClick={() => document.getElementById(`file-${question.code}`)?.click()}
             >
               <Upload className="h-4 w-4" />
-              {uploadBusy ? "Enviando..." : "Selecionar Arquivo"}
+              {uploadBusy ? "Enviando..." : "File"}
             </Button>
             <input
               id={`file-${question.code}`}
@@ -571,7 +571,7 @@ export function QuestionRenderer({
                             disabled={locked || ro}
                           >
                             <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Selecione" />
+                              <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
                               {opts.map((op) => (
