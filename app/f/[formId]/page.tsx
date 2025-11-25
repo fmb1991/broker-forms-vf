@@ -214,7 +214,7 @@ export default function FormPage({
         }
 
         // 2) Redirect to success page
-        router.push("/success")
+        router.push(`/success?lang=${lang}`)
         return
       } else {
         // Not OK (missing required fields) -> inform user and keep on the form
