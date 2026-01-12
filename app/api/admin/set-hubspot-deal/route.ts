@@ -1,12 +1,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 type Body = {
   token?: string;
@@ -15,6 +10,7 @@ type Body = {
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin();
     const body = (await req.json()) as Body;
     const token = (body.token || "").trim();
     const dealRaw = (body.hubspot_deal_id ?? "").toString().trim();

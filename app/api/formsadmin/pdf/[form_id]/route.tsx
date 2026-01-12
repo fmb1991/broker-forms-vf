@@ -1,7 +1,8 @@
 // app/api/formsadmin/pdf/[form_id]/route.tsx
 import React from "react";
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "../../../../../lib/supabaseAdmin";
 import path from "path";
 import fs from "fs/promises";
 import { pdf } from "@react-pdf/renderer";
@@ -108,7 +109,7 @@ function rowToPrettyLine(
 
 /* ---------- storage helpers for attachments ---------- */
 
-async function listAllFromStorage(prefix: string) {
+async function listAllFromStorage(supabaseAdmin: SupabaseClient, prefix: string) {
   // normalize prefix
   let base = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
   if (base) base += "/";
@@ -150,6 +151,7 @@ export async function POST(
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
     const formId = params.form_id;
 
     // 1) form
@@ -209,7 +211,7 @@ export async function POST(
       // optional fallback: if DB empty, try storage listing
       const base = (process.env.STORAGE_FORMS_PREFIX || "").trim();
       const prefix = base ? `${base}/${formId}` : `${formId}`;
-      const listed = await listAllFromStorage(prefix);
+      const listed = await listAllFromStorage(supabaseAdmin, prefix);
       attachments = listed.map((x) => ({ filename: x.name }));
     }
 

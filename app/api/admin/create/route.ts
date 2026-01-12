@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   const ttl = Number.isFinite(Number(ttlMinutes)) ? Number(ttlMinutes) : 60 * 24 * 30;
   const contactJson = contact && typeof contact === "object" ? contact : null;
 
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin.rpc("admin_create_form_instance", {
     p_template_slug: templateSlug,
     p_company: company,
