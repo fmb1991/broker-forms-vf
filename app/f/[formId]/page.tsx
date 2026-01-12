@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "../../../lib/supabaseClient"
+import { getSupabaseClient } from "../../../lib/supabaseClient"
 import { FormShell } from "../../../components/forms/FormShell"
 import { QuestionRenderer } from "../../../components/forms/QuestionRenderer"
 
@@ -49,6 +49,8 @@ type Payload = {
   form: { id: string; status: "draft" | "submitted"; company?: string; contact?: any }
   questions: Question[]
 }
+
+const supabase = getSupabaseClient()
 
 /** ---------- Debounced saving helper ---------- */
 const SAVE_DEBOUNCE_MS = 600

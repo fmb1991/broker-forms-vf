@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   const { adminSecret, status, q, page = 1, pageSize = 20 } = await req.json().catch(() => ({}));
@@ -11,6 +11,7 @@ export async function POST(req: Request) {
   const from = (Number(page) - 1) * Number(pageSize);
   const to = from + Number(pageSize) - 1;
 
+  const supabaseAdmin = getSupabaseAdmin();
   let query = supabaseAdmin.from("v_formsadmin").select("*", { count: "exact" });
 
   if (status) query = query.eq("computed_status", status);

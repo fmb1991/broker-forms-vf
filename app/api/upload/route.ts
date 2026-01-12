@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!; // server-only secret
+import { getSupabaseAdmin } from "../../../lib/supabaseAdmin";
 const BUCKET = "form-uploads"; // create as PRIVATE in Supabase Storage
-
-const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
-});
 
 export async function POST(req: NextRequest) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const { token, questionCode, fileName, contentType } = await req.json();
 
     if (!token || !questionCode || !fileName) {

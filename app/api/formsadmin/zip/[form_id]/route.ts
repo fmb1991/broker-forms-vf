@@ -1,6 +1,6 @@
 // app/api/formsadmin/zip/[form_id]/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
+import { getSupabaseAdmin } from "../../../../../lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +48,7 @@ export async function POST(
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
+    const supabaseAdmin = getSupabaseAdmin();
     const formId = params.form_id;
 
     // 1) Fetch ALL columns so we don't break if some don't exist
@@ -111,4 +112,3 @@ export async function POST(
     );
   }
 }
-

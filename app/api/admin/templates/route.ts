@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export async function POST(req: Request) {
   const { adminSecret } = await req.json().catch(() => ({}));
@@ -10,6 +10,7 @@ export async function POST(req: Request) {
   }
 
   // ✅ Consulta igual que antes
+  const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("form_templates")
     .select("id, slug, product_code, industry_code, version, status")
@@ -22,4 +23,3 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, templates: data ?? [] });
 }
-
