@@ -5,16 +5,6 @@ import { getSupabaseAdmin } from "../../../../lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Body expected:
- * {
- *   token: string,
- *   questionCode: string,
- *   objectKey: string,
- *   fileName: string,
- *   size?: number
- * }
- */
 export async function POST(req: NextRequest) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
@@ -24,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "missing parameters" }, { status: 400 });
     }
 
-    // 1) Validate token and get form_id
+    // 1) Validate token -> form_id
     const { data: tok, error: tokErr } = await supabaseAdmin
       .from("form_access_tokens")
       .select("form_id, expires_at")
@@ -38,10 +28,10 @@ export async function POST(req: NextRequest) {
 
     const formId = tok.form_id;
 
-    // 2) Get the form template_id (so we map questionCode only inside the correct template)
+    // 2) Get template_id from the form instance
     const { data: form, error: formErr } = await supabaseAdmin
       .from("form_instances")
-      .select("id, template_id")
+      .select("template_id")
       .eq("id", formId)
       .single();
 
@@ -49,7 +39,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: formErr?.message || "form_not_found" }, { status: 404 });
     }
 
-    // 3) Find the template_questions.id for this questionCode
+    // 3) Map questionCode -> template_questions.id (question_id)
     const { data: q, error: qErr } = await supabaseAdmin
       .from("template_questions")
       .select("id")
@@ -64,25 +54,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const questionId = q.id;
-
-    // 4) Insert into form_files
-    // NOTE: your schema uses uploaded_at (default now), so we don't need to set it.
+    // 4) Insert into form_files (uploaded_at defaults to now())
     const { error: insErr } = await supabaseAdmin.from("form_files").insert({
       form_id: formId,
-      question_id: questionId,
+      question_id: q.id,
       storage_path: objectKey,
       filename: fileName,
       size: typeof size === "number" ? size : null,
-      // uploaded_at will default to now()
     });
 
-    if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 500 });
-    }
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "internal_error" }, { status: 500 });
   }
 }
+
