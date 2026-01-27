@@ -170,19 +170,19 @@ export async function POST(
       .eq("form_id", formId);
 
     // 6) attachments — ONLY for this form (NO storage fallback)
-    const { data: filesDb, error: filesErr } = await supabaseAdmin
-      .from("form_files")
-      .select("id, form_id, filename, storage_path, created_at")
-      .eq("form_id", formId)
-      .order("created_at", { ascending: true });
+const { data: filesDb, error: filesErr } = await supabaseAdmin
+  .from("form_files")
+  .select("id, form_id, filename, storage_path")
+  .eq("form_id", formId)
+  .order("id", { ascending: true });
 
-    if (filesErr) {
-      return NextResponse.json({ error: filesErr.message }, { status: 500 });
-    }
+if (filesErr) {
+  return NextResponse.json({ error: filesErr.message }, { status: 500 });
+}
 
-    const attachments: { filename: string }[] = (filesDb || []).map((f) => ({
-      filename: f.filename || (f.storage_path?.split("/").pop() || ""),
-    }));
+const attachments: { filename: string }[] = (filesDb || []).map((f) => ({
+  filename: f.filename || (f.storage_path?.split("/").pop() || ""),
+}));
 
     // maps
     const answerMap = new Map<number, any>();
