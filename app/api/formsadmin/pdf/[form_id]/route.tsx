@@ -1,7 +1,6 @@
 // app/api/formsadmin/pdf/[form_id]/route.tsx
 import React from "react";
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "../../../../../lib/supabaseAdmin";
 import path from "path";
 import fs from "fs/promises";
@@ -10,8 +9,6 @@ import FortersFormPdf, { QAItem } from "@/pdf-templates/FortersFormPdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const BUCKET = "form-uploads";
 
 /* ---------- helpers: parsing / formatting ---------- */
 
@@ -34,12 +31,6 @@ function normalize(v: any) {
   return v;
 }
 
-function fmtBoolean(v: any) {
-  const vv = normalize(v);
-  const b = typeof vv === "boolean" ? vv : vv?.value ?? vv?.val;
-  return b === true ? "Sim" : b === false ? "Não" : "-";
-}
-
 function arrayToStr(arr: any[]) {
   return arr
     .map((x) =>
@@ -48,6 +39,12 @@ function arrayToStr(arr: any[]) {
         : x?.label ?? x?.value ?? JSON.stringify(x ?? "")
     )
     .join(", ");
+}
+
+function fmtBoolean(v: any) {
+  const vv = normalize(v);
+  const b = typeof vv === "boolean" ? vv : vv?.value ?? vv?.val;
+  return b === true ? "Sim" : b === false ? "Não" : "-";
 }
 
 function fmtArray(v: any) {
@@ -60,8 +57,7 @@ function fmtScalar(v: any) {
   const vv = normalize(v);
   const raw = vv?.value ?? vv?.val ?? vv;
 
-  // SPECIAL: If raw is a JSON-looking string array e.g. '["brasil"]'
-  // normalize() above will already have converted it. Handle arrays here too.
+  // If raw is an array, render as comma-separated
   if (Array.isArray(raw)) return arrayToStr(raw);
 
   if (raw == null) return "-";
@@ -96,8 +92,8 @@ function rowToPrettyLine(
   const pairs = Object.entries(rowObj || {}).map(([k, val]) => {
     const label = colLabelByKey[k] || k;
     const vv = normalize(val);
-    let printable: string;
 
+    let printable: string;
     if (Array.isArray(vv)) printable = arrayToStr(vv);
     else if (typeof vv === "object" && vv !== null) printable = fmtScalar(vv);
     else printable = String(vv ?? "-");
@@ -105,38 +101,6 @@ function rowToPrettyLine(
     return `${label}: ${printable}`;
   });
   return pairs.join(" | ");
-}
-
-/* ---------- storage helpers for attachments ---------- */
-
-async function listAllFromStorage(supabaseAdmin: SupabaseClient, prefix: string) {
-  // normalize prefix
-  let base = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
-  if (base) base += "/";
-
-  const out: { path: string; name: string }[] = [];
-
-  async function walk(dir: string) {
-    const { data, error } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .list(dir, { limit: 1000, offset: 0, sortBy: { column: "name", order: "asc" } });
-    if (error) return;
-
-    for (const item of data || []) {
-      if ((item as any).id) {
-        // file
-        const full = (base + (dir ? dir + "/" : "") + item.name).replace(/\/+/g, "/");
-        out.push({ path: full, name: item.name });
-      } else {
-        // folder
-        const next = (dir ? dir + "/" : "") + item.name;
-        await walk(next);
-      }
-    }
-  }
-
-  await walk("");
-  return out;
 }
 
 /* ------------------- main handler ------------------- */
@@ -160,8 +124,12 @@ export async function POST(
       .select("id, template_id, language, created_at, respondent_company")
       .eq("id", formId)
       .single();
+
     if (formErr || !form) {
-      return NextResponse.json({ error: formErr?.message || "form_not_found" }, { status: 404 });
+      return NextResponse.json(
+        { error: formErr?.message || "form_not_found" },
+        { status: 404 }
+      );
     }
 
     // 2) template (for human form name)
@@ -170,10 +138,11 @@ export async function POST(
       .select("slug, product_code, industry_code, version")
       .eq("id", form.template_id)
       .single();
+
     const formName =
       (tpl?.product_code ? `${tpl.product_code}` : "") +
-      (tpl?.industry_code ? ` • ${tpl.industry_code}` : "") +
-      (tpl?.version ? ` • v${tpl.version}` : "") ||
+        (tpl?.industry_code ? ` • ${tpl.industry_code}` : "") +
+        (tpl?.version ? ` • v${tpl.version}` : "") ||
       tpl?.slug ||
       "Formulário";
 
@@ -183,6 +152,7 @@ export async function POST(
       .select("id, order, label_json, type, config_json")
       .eq("template_id", form.template_id)
       .order("order", { ascending: true });
+
     if (qErr) return NextResponse.json({ error: qErr.message }, { status: 500 });
 
     // 4) answers (schema uses value_json)
@@ -190,6 +160,7 @@ export async function POST(
       .from("form_answers")
       .select("question_id, value_json")
       .eq("form_id", formId);
+
     if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
 
     // 5) table rows
@@ -198,22 +169,20 @@ export async function POST(
       .select("question_id, row_index, row_json")
       .eq("form_id", formId);
 
-    // 6) attachments (prefer DB; if none, look in Storage under <prefix>/<formId>/…)
-    const { data: filesDb } = await supabaseAdmin
+    // 6) attachments — ONLY for this form (NO storage fallback)
+    const { data: filesDb, error: filesErr } = await supabaseAdmin
       .from("form_files")
-      .select("filename, storage_path")
-      .eq("form_id", formId);
+      .select("id, form_id, filename, storage_path, created_at")
+      .eq("form_id", formId)
+      .order("created_at", { ascending: true });
 
-    let attachments: { filename: string }[] = [];
-    if (filesDb && filesDb.length > 0) {
-      attachments = filesDb.map((f) => ({ filename: f.filename || (f.storage_path?.split("/").pop() || "") }));
-    } else {
-      // optional fallback: if DB empty, try storage listing
-      const base = (process.env.STORAGE_FORMS_PREFIX || "").trim();
-      const prefix = base ? `${base}/${formId}` : `${formId}`;
-      const listed = await listAllFromStorage(supabaseAdmin, prefix);
-      attachments = listed.map((x) => ({ filename: x.name }));
+    if (filesErr) {
+      return NextResponse.json({ error: filesErr.message }, { status: 500 });
     }
+
+    const attachments: { filename: string }[] = (filesDb || []).map((f) => ({
+      filename: f.filename || (f.storage_path?.split("/").pop() || ""),
+    }));
 
     // maps
     const answerMap = new Map<number, any>();
@@ -230,9 +199,9 @@ export async function POST(
     const tableColLabel: Record<number, Record<string, string>> = {};
     for (const q of questions || []) {
       if ((q as any).type !== "table") continue;
+
       const cfg = (q as any).config_json || {};
       let columns: any[] = [];
-      // We accept either config_json.columns or config_json.table?.columns
       if (Array.isArray((cfg as any).columns)) columns = (cfg as any).columns;
       if (Array.isArray((cfg as any).table?.columns)) columns = (cfg as any).table.columns;
 
@@ -247,96 +216,95 @@ export async function POST(
               labelJson["en"] ||
               labelJson["es-419"]
             : String(labelJson ?? key);
+
         if (key) byKey[key] = label;
       }
+
       tableColLabel[(q as any).id] = byKey;
     }
 
-    // 7) Build Q&A rows with correct formatting
-    const qaItems: QAItem[] = (questions || []).map((q: any) => {
-      const label =
-        typeof q.label_json === "object"
-          ? q.label_json[form.language] ||
-            q.label_json["pt-BR"] ||
-            q.label_json["en"] ||
-            q.label_json["es-419"]
-          : q.label_json || "";
+    // 7) Build Q&A rows — HIDE attachment questions
+    const qaItems: QAItem[] = (questions || [])
+      .filter((q: any) => q.type !== "attachment")
+      .map((q: any) => {
+        const label =
+          typeof q.label_json === "object"
+            ? q.label_json[form.language] ||
+              q.label_json["pt-BR"] ||
+              q.label_json["en"] ||
+              q.label_json["es-419"]
+            : q.label_json || "";
 
-      let answerStr = "-";
-      const val = answerMap.get(q.id);
+        let answerStr = "-";
+        const val = answerMap.get(q.id);
 
-      switch (q.type) {
-        case "boolean":
-          answerStr = fmtBoolean(val);
-          break;
+        switch (q.type) {
+          case "boolean":
+            answerStr = fmtBoolean(val);
+            break;
 
-        case "one_choice":
-        case "oneChoice":
-        case "select":
-        case "radio":
-          answerStr = fmtScalar(val);
-          break;
+          case "one_choice":
+          case "oneChoice":
+          case "select":
+          case "radio":
+            answerStr = fmtScalar(val);
+            break;
 
-        case "multiple_choice":
-        case "multipleChoice":
-        case "checkbox":
-          answerStr = fmtArray(val);
-          break;
+          case "multiple_choice":
+          case "multipleChoice":
+          case "checkbox":
+            answerStr = fmtArray(val);
+            break;
 
-        case "date":
-          answerStr = fmtDate(val);
-          break;
+          case "date":
+            answerStr = fmtDate(val);
+            break;
 
-        case "currency":
-          answerStr = fmtCurrency(val);
-          break;
+          case "currency":
+            answerStr = fmtCurrency(val);
+            break;
 
-        case "number":
-          answerStr = fmtScalar(val);
-          break;
+          case "number":
+            answerStr = fmtScalar(val);
+            break;
 
-        case "text":
-        case "long_text":
-        case "longText":
-          answerStr = fmtScalar(val);
-          break;
+          case "text":
+          case "long_text":
+          case "longText":
+            answerStr = fmtScalar(val);
+            break;
 
-        case "attachment":
-          // we show them on the cover; keep a hint here
-          answerStr = attachments.length
-            ? `${attachments.length} arquivo(s) enviado(s)`
-            : "Sem anexos";
-          break;
+          case "table": {
+            const rows = (tableMap.get(q.id) || []).sort(
+              (a: any, b: any) => (a.row_index ?? 0) - (b.row_index ?? 0)
+            );
 
-        case "table": {
-          const rows = (tableMap.get(q.id) || []).sort(
-            (a: any, b: any) => (a.row_index ?? 0) - (b.row_index ?? 0)
-          );
-          if (!rows.length) {
-            answerStr = "-";
-          } else {
-            const colMap = tableColLabel[q.id] || {};
-            const lines = rows.map((r) => {
-              const obj =
-                typeof r.row_json === "string" ? normalize(r.row_json) : r.row_json || {};
-              return `• ${rowToPrettyLine(obj as Record<string, any>, colMap)}`;
-            });
-            answerStr = lines.join("\n");
+            if (!rows.length) {
+              answerStr = "-";
+            } else {
+              const colMap = tableColLabel[q.id] || {};
+              const lines = rows.map((r) => {
+                const obj =
+                  typeof r.row_json === "string"
+                    ? normalize(r.row_json)
+                    : r.row_json || {};
+                return `• ${rowToPrettyLine(obj as Record<string, any>, colMap)}`;
+              });
+              answerStr = lines.join("\n");
+            }
+            break;
           }
-          break;
+
+          default:
+            answerStr = fmtScalar(val);
         }
 
-        default:
-          // catch-all still cleans JSON-looking arrays like '["Brasil"]'
-          answerStr = fmtScalar(val);
-      }
-
-      return {
-        order: q.order ?? 0,
-        question: String(label || `Pergunta #${q.id}`),
-        answer: String(answerStr || "-"),
-      };
-    });
+        return {
+          order: q.order ?? 0,
+          question: String(label || `Pergunta #${q.id}`),
+          answer: String(answerStr || "-"),
+        };
+      });
 
     // 8) Logo
     let logoDataUrl = "";
@@ -365,6 +333,7 @@ export async function POST(
         attachments={attachments}
       />
     );
+
     const pdfBuffer = await pdf(instance).toBuffer();
 
     return new NextResponse(pdfBuffer, {
@@ -375,6 +344,9 @@ export async function POST(
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "internal_error" },
+      { status: 500 }
+    );
   }
 }
