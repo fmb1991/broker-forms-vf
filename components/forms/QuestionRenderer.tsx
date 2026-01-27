@@ -409,20 +409,39 @@ export function QuestionRenderer({
         if (!response.ok) throw new Error(result.error || "Falha ao criar URL de upload")
 
         const uploadResponse = await fetch(result.uploadUrl, {
-          method: "PUT",
-          headers: { "content-type": result.contentType },
-          body: file,
-        })
+  method: "PUT",
+  headers: { "content-type": result.contentType },
+  body: file,
+})
 
-        if (!uploadResponse.ok) throw new Error("Falha no upload")
+if (!uploadResponse.ok) throw new Error("Falha no upload")
 
-        const metadata = {
-          bucket: result.bucket,
-          objectKey: result.objectKey,
-          filename: file.name,
-          size: file.size,
-          contentType: file.type || "application/octet-stream",
-        }
+// ✅ NEW STEP: record attachment in DB (THIS IS THE MISSING LINK)
+const recordResponse = await fetch("/api/upload/record", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    token,
+    questionCode: question.code,
+    objectKey: result.objectKey,
+    fileName: file.name,
+    size: file.size,
+  }),
+})
+
+const recordResult = await recordResponse.json().catch(() => ({}))
+if (!recordResponse.ok) {
+  throw new Error(recordResult.error || "Falha ao registrar anexo no banco")
+}
+
+// existing behavior (keep this)
+const metadata = {
+  bucket: result.bucket,
+  objectKey: result.objectKey,
+  filename: file.name,
+  size: file.size,
+  contentType: file.type || "application/octet-stream",
+}
 
         onAnswerChange(question.code, metadata)
       } catch (error: any) {
