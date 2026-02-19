@@ -240,20 +240,20 @@ export function QuestionRenderer({
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="true" id={`${question.code}-true`} />
             <Label htmlFor={`${question.code}-true`} className="font-medium text-slate-700">
-              Sim
+              True
             </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="false" id={`${question.code}-false`} />
             <Label htmlFor={`${question.code}-false`} className="font-medium text-slate-700">
-              Não
+              False
             </Label>
           </div>
         </RadioGroup>
 
         <div>
           <Label htmlFor={`${question.code}-details`} className="text-sm text-slate-700">
-            Comentários adicionais (opcional)
+            Comments (opcional)
           </Label>
           <Textarea
             id={`${question.code}-details`}
