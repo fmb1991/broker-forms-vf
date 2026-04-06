@@ -158,7 +158,7 @@ export function FormShell({
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
           {/* Logo */}
           <img
-            src="/Covercap%201.2%20Scondary_v2.PNG"
+            src="/Covercap_Scondary_v2.PNG"
             alt="CoverCap"
             className="h-10 w-auto"
           />
@@ -366,7 +366,7 @@ export function FormShell({
             <div className="lg:col-span-1">
               <div className="mb-6 flex items-center gap-3">
                 <div className="relative h-8 w-8 flex-shrink-0">
-                  <img src="/Covercap%201.2%20Scondary_v2.PNG" alt="CoverCap" className="h-8 w-auto object-contain" />
+                  <img src="/Covercap_Scondary_v2.PNG" alt="CoverCap" className="h-8 w-auto object-contain" />
                 </div>
                 <span className="text-xl font-bold text-white tracking-wide">COVERCAP</span>
               </div>
