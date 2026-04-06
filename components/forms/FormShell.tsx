@@ -1,757 +1,448 @@
 "use client"
 
 import type React from "react"
-import { useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
-import type { FormLanguage } from "@/lib/languages"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Upload, FileText } from "lucide-react"
+import { ChevronRight, Send, CheckCircle } from "lucide-react"
 
-/* =========================
-   Types
-   ========================= */
-
-type I18n = Record<string, string>
-
-type Option = { value: string; label: string; order?: number }
-
-type FieldConfig = {
-  min?: number
-  max?: number
-  step?: number
+type Section = {
+  id: string
+  label: string
+  subtitle?: string
+  totalFields: number
+  completedFields: number
 }
 
-type TableSchemaField = {
-  key: string
-  type: "text" | "boolean" | "number" | "date" | "currency" | "single_select"
-  label?: I18n | string
-  required?: boolean
-  readonly?: boolean
-  options?: Option[]
-  config?: FieldConfig
+type FormShellProps = {
+  company?: string
+  status: "draft" | "submitted"
+  children: React.ReactNode
+  onSubmit: () => void
+  submitting: boolean
+  lang?: string
+  sections?: Section[]
+  activeSection?: string
+  onSectionChange?: (id: string) => void
+  totalFields?: number
+  completedFields?: number
+  onLanguageChange?: (lang: string) => void
 }
 
-type TableRow = { row_index: number; row: Record<string, any> }
+export function FormShell({
+  company,
+  status,
+  children,
+  onSubmit,
+  submitting,
+  lang = "pt-BR",
+  sections,
+  activeSection,
+  onSectionChange,
+  totalFields = 0,
+  completedFields = 0,
+  onLanguageChange,
+}: FormShellProps) {
+  const locked = status === "submitted"
+  const langNorm = lang.toLowerCase()
 
-type TableConfig = {
-  currency?: string
-  decimals?: number
+  function getTitle() {
+    if (langNorm.startsWith("en")) return "Insurance Form"
+    if (langNorm.startsWith("es")) return "Cuestionario de Seguros"
+    return "Questionário de Seguros"
+  }
 
-  // legacy (tech E&O) format:
-  table_schema?: TableSchemaField[]
-
-  // new format (cyber) format:
-  columns?: any[]
-
-  // attachments config (unused here but kept)
-  max_mb?: number
-  allowed?: string[]
-
-  // table behavior flags
-  mode?: "dynamic" | "fixed"
-  allow_add_rows?: boolean
-  allow_delete_rows?: boolean
-
-  // row limits (IMPORTANT)
-  maxRows?: number
-  minRows?: number
-
-  // legacy fixed-rows layout for other templates
-  table_rows?: Array<{ code: string; title?: I18n; subtitle?: I18n }>
-}
-
-type Question = {
-  code: string
-  type:
-    | "boolean"
-    | "single_select"
-    | "multi_select"
-    | "date"
-    | "currency"
-    | "text"
-    | "number"
-    | "attachment"
-    | "table"
-  label: I18n | string
-  help?: I18n | string
-  config?: TableConfig
-  options?: Option[]
-  answer: any
-  table_rows?: TableRow[]
-}
-
-type QuestionRendererProps = {
-  question: Question
-  questionNumber: number
-  sectionTitle?: string
-  locked: boolean
-  onAnswerChange: (code: string, value: any) => void
-  onTableRowChange?: (code: string, rowIndex: number, row: Record<string, any>) => void
-  onAddTableRow?: (code: string) => void
-  token?: string
-  tagType?: "required" | "optional" | "conditional" | "financial"
-}
-
-/* =========================
-   Helpers
-   ========================= */
-
-function i18nPick(obj: I18n | string | undefined, locale: string = "pt-BR", fallback = "") {
-  if (!obj) return fallback
-  if (typeof obj === "string") return obj
-  return obj[locale] ?? obj["pt-BR"] ?? obj["en"] ?? Object.values(obj)[0] ?? fallback
-}
-
-/** Normalize table schema so we support BOTH formats:
- *  - legacy: config.table_schema
- *  - new:    config.columns
- */
-function useNormalizedTableSchema(config: TableConfig | undefined, locale: string) {
-  return useMemo<TableSchemaField[]>(() => {
-    const cfg = config || {}
-
-    // 1) Legacy path
-    if (Array.isArray(cfg.table_schema) && cfg.table_schema.length > 0) {
-      return cfg.table_schema
+  function getButtonLabel() {
+    if (locked) {
+      if (langNorm.startsWith("en")) return "Submitted"
+      if (langNorm.startsWith("es")) return "Enviado"
+      return "Enviado"
     }
-
-    // 2) New path (columns)
-    if (Array.isArray(cfg.columns) && cfg.columns.length > 0) {
-      return cfg.columns.map((c: any) => {
-        const opts: Option[] | undefined = Array.isArray(c.options)
-          ? c.options.map((o: any) => ({
-              value: String(o.value),
-              label: i18nPick(o.label, locale, String(o.value)),
-            }))
-          : undefined
-
-        const field: TableSchemaField = {
-          key: String(c.key),
-          type: (String(c.type) as TableSchemaField["type"]) || "text",
-          label: c.label,
-          required: !!c.required,
-          readonly: !!c.readonly,
-          options: opts,
-          config: c.config || undefined, // IMPORTANT: pass min/max/etc through
-        }
-        return field
-      })
+    if (submitting) {
+      if (langNorm.startsWith("en")) return "Submitting..."
+      if (langNorm.startsWith("es")) return "Enviando..."
+      return "Enviando..."
     }
-
-    return []
-  }, [config, locale])
-}
-
-function clampNumber(n: number, min?: number, max?: number) {
-  let v = n
-  if (typeof min === "number" && Number.isFinite(min)) v = Math.max(min, v)
-  if (typeof max === "number" && Number.isFinite(max)) v = Math.min(max, v)
-  return v
-}
-
-/* =========================
-   Component
-   ========================= */
-
-export function QuestionRenderer({
-  question,
-  questionNumber,
-  sectionTitle,
-  locked,
-  onAnswerChange,
-  onTableRowChange,
-  onAddTableRow,
-  token,
-  tagType,
-}: QuestionRendererProps) {
-  const [uploadBusy, setUploadBusy] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-
-  // language from ?lang= in the URL (pt-BR / en / es)
-  const searchParams = useSearchParams()
-  const langParam = (searchParams?.get("lang") as FormLanguage | null) || null
-  const locale: FormLanguage | "pt-BR" = langParam || "pt-BR"
-
-  const renderSectionTitle = () => {
-    if (!sectionTitle) return null
-    return (
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-px bg-slate-300 flex-1" />
-          <h2 className="text-lg font-semibold text-slate-700 px-4 py-2 bg-slate-100 rounded-full">
-            {sectionTitle}
-          </h2>
-          <div className="h-px bg-slate-300 flex-1" />
-        </div>
-      </div>
-    )
+    if (langNorm.startsWith("en")) return "Submit form"
+    if (langNorm.startsWith("es")) return "Enviar cuestionario"
+    return "Enviar Questionário"
   }
 
-  const renderQuestionHeader = () => {
-    const localeLow = locale.toLowerCase()
-
-    // Resolve which tag to show
-    const resolvedTag: "required" | "optional" | "conditional" | "financial" | null =
-      tagType ?? ((question as any).required === true ? "required" : null)
-
-    const tagBadge = (() => {
-      if (!resolvedTag) return null
-      if (resolvedTag === "required") {
-        const label = localeLow.startsWith("en") ? "Required" : localeLow.startsWith("es") ? "Obligatorio" : "Obrigatório"
-        return (
-          <span className="text-xs px-2 py-1 rounded-full bg-[#FF5722] text-white font-medium flex-shrink-0 mt-1">
-            {label}
-          </span>
-        )
-      }
-      if (resolvedTag === "optional") {
-        return (
-          <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium flex-shrink-0 mt-1">
-            Opcional
-          </span>
-        )
-      }
-      if (resolvedTag === "conditional") {
-        return (
-          <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium flex-shrink-0 mt-1">
-            Condicional
-          </span>
-        )
-      }
-      if (resolvedTag === "financial") {
-        const label = localeLow.startsWith("en") ? "Financial" : localeLow.startsWith("es") ? "Financiero" : "Financeiro"
-        return (
-          <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium flex-shrink-0 mt-1">
-            {label}
-          </span>
-        )
-      }
-      return null
-    })()
-
-    return (
-      <CardHeader className="pb-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <Badge
-              variant="secondary"
-              className="bg-[#0A1628] text-white font-semibold min-w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0"
-            >
-              {questionNumber}
-            </Badge>
-            <div className="flex-1">
-              <CardTitle className="text-lg font-semibold text-slate-800 leading-relaxed">
-                {i18nPick(question.label, locale)}
-              </CardTitle>
-              {question.help && (
-                <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                  {i18nPick(question.help, locale)}
-                </p>
-              )}
-            </div>
-          </div>
-          {tagBadge}
-        </div>
-      </CardHeader>
-    )
+  function getCompanyLabel() {
+    if (langNorm.startsWith("en")) return "Company:"
+    if (langNorm.startsWith("es")) return "Empresa:"
+    return "Empresa:"
   }
 
-  /* ========= Scalars ========= */
-
-  const renderBooleanQuestion = () => {
-    const raw = question.answer
-    const boolValue: boolean | null =
-      raw && typeof raw === "object" ? (raw.value ?? null) : raw === true ? true : raw === false ? false : null
-    const details: string = raw && typeof raw === "object" ? (raw.details ?? "") : ""
-
-    const localeLow = locale.toLowerCase()
-    const yesLabel = localeLow.startsWith("en") ? "Yes" : localeLow.startsWith("es") ? "Sí" : "Sim"
-    const noLabel = localeLow.startsWith("en") ? "No" : "Não"
-
-    return (
-      <CardContent className="space-y-4">
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              const rawCurrent = question.answer
-              const currentDetails = rawCurrent && typeof rawCurrent === "object" ? (rawCurrent.details ?? "") : ""
-              onAnswerChange(question.code, { value: true, details: currentDetails })
-            }}
-            disabled={locked}
-            className={`flex-1 py-3 px-6 rounded-lg font-semibold border-2 transition-all ${
-              boolValue === true
-                ? "bg-[#FF5722] border-[#FF5722] text-white"
-                : "bg-white border-gray-200 text-gray-700 hover:border-[#FF5722] hover:text-[#FF5722]"
-            }`}
-          >
-            {yesLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const rawCurrent = question.answer
-              const currentDetails = rawCurrent && typeof rawCurrent === "object" ? (rawCurrent.details ?? "") : ""
-              onAnswerChange(question.code, { value: false, details: currentDetails })
-            }}
-            disabled={locked}
-            className={`flex-1 py-3 px-6 rounded-lg font-semibold border-2 transition-all ${
-              boolValue === false
-                ? "bg-[#0A1628] border-[#0A1628] text-white"
-                : "bg-white border-gray-200 text-gray-700 hover:border-[#0A1628] hover:text-[#0A1628]"
-            }`}
-          >
-            {noLabel}
-          </button>
-        </div>
-
-        <div>
-          <Label htmlFor={`${question.code}-details`} className="text-sm text-slate-700">
-            Comments (opcional)
-          </Label>
-          <Textarea
-            id={`${question.code}-details`}
-            value={details}
-            onChange={(e) => {
-              const rawCurrent = question.answer
-              const currentBool: boolean | null =
-                rawCurrent && typeof rawCurrent === "object"
-                  ? rawCurrent.value ?? null
-                  : rawCurrent === true
-                  ? true
-                  : rawCurrent === false
-                  ? false
-                  : null
-              onAnswerChange(question.code, { value: currentBool, details: e.target.value })
-            }}
-            placeholder="Details"
-            disabled={locked}
-            className="mt-2 min-h-20 resize-none"
-          />
-        </div>
-      </CardContent>
-    )
+  function getNotInformed() {
+    if (langNorm.startsWith("en")) return "Not informed"
+    if (langNorm.startsWith("es")) return "No informada"
+    return "Não informada"
   }
 
-  const renderSingleSelect = () => (
-    <CardContent>
-      <Select value={question.answer || ""} onValueChange={(value) => onAnswerChange(question.code, value)} disabled={locked}>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Select" />
-        </SelectTrigger>
-        <SelectContent>
-          {(question.options || []).map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </CardContent>
-  )
-
-  const renderMultiSelect = () => (
-    <CardContent>
-      <div className="space-y-3">
-        {(question.options || []).map((option) => {
-          const checked = Array.isArray(question.answer) && question.answer.includes(option.value)
-          return (
-            <div key={option.value} className="flex items-center space-x-3">
-              <Checkbox
-                id={`${question.code}-${option.value}`}
-                checked={checked}
-                onCheckedChange={(isChecked) => {
-                  const currentValues = Array.isArray(question.answer) ? question.answer : []
-                  const newValues = isChecked ? [...currentValues, option.value] : currentValues.filter((v) => v !== option.value)
-                  onAnswerChange(question.code, newValues)
-                }}
-                disabled={locked}
-              />
-              <Label htmlFor={`${question.code}-${option.value}`} className="font-medium text-slate-700">
-                {option.label}
-              </Label>
-            </div>
-          )
-        })}
-      </div>
-    </CardContent>
-  )
-
-  const renderTextQuestion = () => (
-    <CardContent>
-      <Textarea
-        value={(question.answer as string) || ""}
-        onChange={(e) => onAnswerChange(question.code, e.target.value)}
-        placeholder="Type"
-        disabled={locked}
-        className="min-h-24 resize-none focus:border-[#FF5722] focus:ring-[#FF5722]/20"
-      />
-    </CardContent>
-  )
-
-  const renderNumberQuestion = () => (
-    <CardContent>
-      <Input
-        type="number"
-        value={question.answer || ""}
-        onChange={(e) => {
-          const value = e.target.value === "" ? null : Number(e.target.value)
-          onAnswerChange(question.code, value)
-        }}
-        placeholder="Número"
-        disabled={locked}
-        className="focus:border-[#FF5722] focus:ring-[#FF5722]/20"
-      />
-    </CardContent>
-  )
-
-  const renderDateQuestion = () => (
-    <CardContent>
-      <Input
-        type="date"
-        value={(question.answer as string) || ""}
-        onChange={(e) => onAnswerChange(question.code, e.target.value)}
-        disabled={locked}
-        className="focus:border-[#FF5722] focus:ring-[#FF5722]/20"
-      />
-    </CardContent>
-  )
-
-  const renderCurrencyQuestion = () => {
-    const decimals = question.config?.decimals ?? 2
-    const currency = question.config?.currency ?? "BRL"
-    const cents = question.answer?.amount_cents ?? null
-    const display = cents != null ? (cents / 100).toFixed(decimals) : ""
-
-    return (
-      <CardContent>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-600 font-medium">{currency === "BRL" ? "R$" : currency}</span>
-          <Input
-            value={display}
-            onChange={(e) => {
-              const clean = e.target.value.replace(/\./g, "").replace(",", ".")
-              const num = Number.isFinite(Number(clean)) ? Number(clean) : 0
-              const next = { amount_cents: Math.round(num * 10 ** decimals), currency }
-              onAnswerChange(question.code, next)
-            }}
-            placeholder={(0).toFixed(decimals)}
-            disabled={locked}
-            className="flex-1 focus:border-[#FF5722] focus:ring-[#FF5722]/20"
-          />
-        </div>
-      </CardContent>
-    )
+  function getSentBadge() {
+    if (langNorm.startsWith("en")) return "Submitted"
+    if (langNorm.startsWith("es")) return "Enviado"
+    return "Enviado"
   }
 
-  /* ========= Attachments ========= */
-
-  const renderAttachmentQuestion = () => {
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file || !token) return
-
-      setUploadBusy(true)
-      setUploadError(null)
-
-      try {
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            token,
-            questionCode: question.code,
-            fileName: file.name,
-            contentType: file.type || "application/octet-stream",
-          }),
-        })
-
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || "Falha ao criar URL de upload")
-
-        const uploadResponse = await fetch(result.uploadUrl, {
-  method: "PUT",
-  headers: { "content-type": result.contentType },
-  body: file,
-})
-
-if (!uploadResponse.ok) throw new Error("Falha no upload")
-
-// ✅ NEW STEP: record attachment in DB (THIS IS THE MISSING LINK)
-const recordResponse = await fetch("/api/upload/record", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    token,
-    questionCode: question.code,
-    objectKey: result.objectKey,
-    fileName: file.name,
-    size: file.size,
-  }),
-})
-
-const recordResult = await recordResponse.json().catch(() => ({}))
-if (!recordResponse.ok) {
-  throw new Error(recordResult.error || "Falha ao registrar anexo no banco")
-}
-
-// existing behavior (keep this)
-const metadata = {
-  bucket: result.bucket,
-  objectKey: result.objectKey,
-  filename: file.name,
-  size: file.size,
-  contentType: file.type || "application/octet-stream",
-}
-
-        onAnswerChange(question.code, metadata)
-      } catch (error: any) {
-        setUploadError(error.message)
-      } finally {
-        setUploadBusy(false)
-        e.target.value = ""
-      }
-    }
-
-    return (
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              disabled={locked || uploadBusy}
-              className="flex items-center gap-2 bg-transparent"
-              onClick={() => document.getElementById(`file-${question.code}`)?.click()}
-            >
-              <Upload className="h-4 w-4" />
-              {uploadBusy ? "Enviando..." : "File"}
-            </Button>
-            <input id={`file-${question.code}`} type="file" onChange={handleFileSelect} className="hidden" disabled={locked || uploadBusy} />
-          </div>
-
-          {question.answer?.filename && (
-            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <FileText className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-800">Arquivo enviado: {question.answer.filename}</span>
-            </div>
-          )}
-
-          {uploadError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <span className="text-sm text-red-700">Erro: {uploadError}</span>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    )
+  function getHeroSubtitle() {
+    if (langNorm.startsWith("en"))
+      return "Complete the form to get a personalized insurance quote for your company."
+    if (langNorm.startsWith("es"))
+      return "Complete el formulario para obtener una cotización personalizada de seguro para su empresa."
+    return "Preencha o formulário para obter uma cotização personalizada de seguro para sua empresa."
   }
 
-  /* ========= Tables ========= */
-
-  const renderTableQuestion = () => {
-    const cfg = (question.config || {}) as TableConfig
-    const schema = useNormalizedTableSchema(cfg, locale)
-
-    const mode: "dynamic" | "fixed" = cfg.mode ?? "dynamic"
-    const maxRows = typeof cfg.maxRows === "number" ? cfg.maxRows : undefined
-
-    const fixedDefs = (cfg.table_rows || []).map((r) => ({ code: r.code, title: r.title, subtitle: r.subtitle }))
-
-    const dynamicRows = question.table_rows || []
-    const byIndex = new Map<number, { row_index: number; row: Record<string, any> }>()
-    for (const r of dynamicRows) byIndex.set(r.row_index, r)
-
-    const rows =
-      mode === "fixed"
-        ? fixedDefs.map((r, idx) => {
-            const row_index = idx + 1
-            const match = byIndex.get(row_index)
-            return { row_index, row: match?.row || {}, __meta: r as any }
-          })
-        : dynamicRows.map((r) => ({ ...r, __meta: undefined }))
-
-    // IMPORTANT: allowAdd must respect BOTH allow_add_rows and maxRows
-    const allowAddFlag = cfg.allow_add_rows ?? true
-    const belowMax = typeof maxRows === "number" ? rows.length < maxRows : true
-    const allowAdd = mode !== "fixed" && allowAddFlag && belowMax
-
-    const fieldLabel = (field: TableSchemaField) => {
-      if (!field.label) return field.key
-      return i18nPick(field.label as any, locale, field.key)
-    }
-
-    return (
-      <CardContent>
-        <div className="space-y-4">
-          {schema.length === 0 && (
-            <div className="text-sm text-muted-foreground">
-              Configuração de tabela sem colunas para <strong>{question.code}</strong>. Verifique se o backend envia
-              <code> config.columns </code> ou <code> config.table_schema</code>.
-            </div>
-          )}
-
-          {rows.map((row) => (
-            <div key={row.row_index} className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
-              {row.__meta && (
-                <div className="mb-1">
-                  <div className="text-sm font-medium">{i18nPick(row.__meta.title as any, locale)}</div>
-                  {row.__meta.subtitle && <div className="text-xs text-slate-500">{i18nPick(row.__meta.subtitle as any, locale)}</div>}
-                </div>
-              )}
-
-              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${schema.length || 1}, 1fr)` }}>
-                {schema.map((field) => {
-                  const value = row.row?.[field.key]
-                  const ro = !!field.readonly
-                  const required = !!field.required
-
-                  if (field.type === "boolean") {
-                    return (
-                      <div key={`${row.row_index}-${field.key}`} className="flex items-center space-x-2">
-                        <Checkbox
-                          checked={!!value}
-                          onCheckedChange={(checked) => {
-                            if (onTableRowChange) {
-                              const newRow = { ...row.row, [field.key]: checked }
-                              onTableRowChange(question.code, row.row_index, newRow)
-                            }
-                          }}
-                          disabled={locked || ro}
-                        />
-                        <Label className="text-sm">{fieldLabel(field)}</Label>
-                      </div>
-                    )
-                  }
-
-                  if (field.type === "single_select") {
-                    const opts = field.options || []
-                    return (
-                      <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
-                        <label className="text-xs font-medium mb-1">
-                          {fieldLabel(field)} {required ? <span className="text-red-500">*</span> : null}
-                        </label>
-                        <Select
-                          value={value ?? ""}
-                          onValueChange={(val) => {
-                            if (onTableRowChange) {
-                              const newRow = { ...row.row, [field.key]: val }
-                              onTableRowChange(question.code, row.row_index, newRow)
-                            }
-                          }}
-                          disabled={locked || ro}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {opts.map((op) => (
-                              <SelectItem key={op.value} value={op.value}>
-                                {op.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )
-                  }
-
-                  // Number/date/text
-                  const min = field.config?.min
-                  const max = field.config?.max
-                  const step = field.config?.step ?? (field.type === "number" ? 1 : undefined)
-
-                  return (
-                    <div key={`${row.row_index}-${field.key}`} className="flex flex-col">
-                      <label className="text-xs font-medium mb-1">
-                        {fieldLabel(field)} {required ? <span className="text-red-500">*</span> : null}
-                      </label>
-                      <Input
-                        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-                        value={value ?? ""}
-                        min={field.type === "number" && typeof min === "number" ? min : undefined}
-                        max={field.type === "number" && typeof max === "number" ? max : undefined}
-                        step={field.type === "number" ? step : undefined}
-                        onChange={(e) => {
-                          if (!onTableRowChange) return
-
-                          let newValue: any = e.target.value
-
-                          if (field.type === "number") {
-                            if (e.target.value === "") {
-                              newValue = null
-                            } else {
-                              const num = Number(e.target.value)
-                              newValue = Number.isFinite(num) ? clampNumber(num, min, max) : null
-                            }
-                          }
-
-                          const newRow = { ...row.row, [field.key]: newValue }
-                          onTableRowChange(question.code, row.row_index, newRow)
-                        }}
-                        disabled={locked || ro}
-                        className="text-sm"
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-
-          {!locked && allowAdd && onAddTableRow && (
-            <Button variant="outline" onClick={() => onAddTableRow(question.code)} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Adicionar Linha
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    )
+  function getFooter() {
+    if (langNorm.startsWith("en"))
+      return "Global Financial Protection · © 2026 CoverCap. All rights reserved."
+    if (langNorm.startsWith("es"))
+      return "Protección Financiera Global · © 2026 CoverCap. Todos los derechos reservados."
+    return "Proteção Financeira Global · © 2026 CoverCap. Todos os direitos reservados."
   }
 
-  const renderQuestionContent = () => {
-    switch (question.type) {
-      case "boolean":
-        return renderBooleanQuestion()
-      case "single_select":
-        return renderSingleSelect()
-      case "multi_select":
-        return renderMultiSelect()
-      case "text":
-        return renderTextQuestion()
-      case "number":
-        return renderNumberQuestion()
-      case "date":
-        return renderDateQuestion()
-      case "currency":
-        return renderCurrencyQuestion()
-      case "attachment":
-        return renderAttachmentQuestion()
-      case "table":
-        return renderTableQuestion()
-      default:
-        return (
-          <CardContent>
-            <div className="text-slate-500">Tipo de pergunta não suportado: {question.type}</div>
-          </CardContent>
-        )
-    }
+  function getNextLabel() {
+    if (langNorm.startsWith("en")) return "Next"
+    if (langNorm.startsWith("es")) return "Siguiente"
+    return "Próximo"
   }
+
+  function getAllCompleteText() {
+    if (langNorm.startsWith("en")) return "All fields completed!"
+    if (langNorm.startsWith("es")) return "¡Todos los campos completados!"
+    return "Todos os campos preenchidos!"
+  }
+
+  function getFieldsLabel() {
+    if (langNorm.startsWith("en")) return "Completed fields:"
+    if (langNorm.startsWith("es")) return "Campos completados:"
+    return "Campos preenchidos:"
+  }
+
+  function getProgressLabel() {
+    if (langNorm.startsWith("en")) return "Progress:"
+    if (langNorm.startsWith("es")) return "Progreso:"
+    return "Progresso:"
+  }
+
+  function getCompletionHint() {
+    const remaining = totalFields - completedFields
+    if (remaining <= 0) return null
+    if (langNorm.startsWith("en"))
+      return `Complete ${remaining} more field${remaining === 1 ? "" : "s"}`
+    if (langNorm.startsWith("es"))
+      return `Completa ${remaining} campo${remaining === 1 ? "" : "s"} más`
+    return `Preencha mais ${remaining} campo${remaining === 1 ? "" : "s"}`
+  }
+
+  const progress = Math.round((completedFields / Math.max(totalFields, 1)) * 100)
+
+  const hasSections = Array.isArray(sections) && sections.length > 0
+  const activeSectionData = hasSections
+    ? sections!.find((s) => s.id === activeSection) || sections![0]
+    : null
+  const effectiveActiveId = activeSectionData?.id
+  const isLastSection = hasSections
+    ? sections![sections!.length - 1]?.id === effectiveActiveId
+    : true
+
+  const langButtons = [
+    { label: "PT", code: "pt-BR", active: langNorm.startsWith("pt") },
+    { label: "EN", code: "en", active: langNorm.startsWith("en") },
+    { label: "ES", code: "es-419", active: langNorm.startsWith("es") },
+  ]
 
   return (
-    <div>
-      {renderSectionTitle()}
-      <Card className="bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-        {renderQuestionHeader()}
-        {renderQuestionContent()}
-      </Card>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      {/* ── Sticky dark header ── */}
+      <header className="sticky top-0 z-20 w-full bg-[#0A1628] shadow-lg border-b border-gray-800">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+          {/* Logo */}
+          <img
+            src="/covercap-logo-white.png"
+            alt="CoverCap"
+            className="h-8 w-auto"
+          />
+
+          <div className="flex items-center gap-4">
+            {/* Fields counter pill — hidden on mobile */}
+            <div className="hidden md:flex bg-white/5 rounded-lg px-4 py-2 backdrop-blur-sm items-center gap-4">
+              <span className="text-sm font-medium text-white">{getFieldsLabel()}</span>
+              <span className="text-sm font-bold text-[#FF5722]">
+                {completedFields}/{totalFields}
+              </span>
+              <div className="w-px h-6 bg-white/20" />
+              <span className="text-sm font-medium text-white">{getProgressLabel()}</span>
+              <span className="text-sm font-bold text-[#FF5722]">{progress}%</span>
+            </div>
+
+            {/* Language switcher */}
+            <div className="bg-white/10 rounded-lg p-1 flex items-center gap-1">
+              {langButtons.map((btn) => (
+                <button
+                  key={btn.label}
+                  type="button"
+                  onClick={() => onLanguageChange?.(btn.code)}
+                  className={
+                    btn.active
+                      ? "bg-[#FF5722] text-white px-3 py-1.5 rounded text-sm font-medium"
+                      : "text-white/70 hover:text-white px-3 py-1.5 rounded text-sm font-medium transition-all"
+                  }
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Mobile-only fields counter bar ── */}
+      <div className="md:hidden bg-[#0A1628] border-t border-gray-800 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-white">
+            {getFieldsLabel()}{" "}
+            <span className="font-bold text-[#FF5722]">
+              {completedFields}/{totalFields}
+            </span>
+          </span>
+          <span className="text-sm font-medium text-white">
+            {getProgressLabel()}{" "}
+            <span className="font-bold text-[#FF5722]">{progress}%</span>
+          </span>
+        </div>
+      </div>
+
+      {/* ── Main content ── */}
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        {/* ── Hero banner ── */}
+        <div className="bg-gradient-to-r from-[#0A1628] to-[#1a2942] rounded-2xl p-8 mb-8 text-white shadow-2xl">
+          <h2 className="text-3xl font-bold mb-3">{getTitle()}</h2>
+          <p className="text-slate-300 mb-6 text-base">{getHeroSubtitle()}</p>
+
+          {/* Company + sent badge */}
+          <div className="flex items-center gap-3 mb-6 text-slate-300 text-sm">
+            <span>
+              {getCompanyLabel()} {company || getNotInformed()}
+            </span>
+            {locked && (
+              <div className="flex items-center gap-1 text-green-400 font-medium">
+                <CheckCircle className="h-4 w-4" />
+                <span>{getSentBadge()}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+            <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-[#FF5722] h-full rounded-full transition-all duration-500 ease-out shadow-lg"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Sectioned layout ── */}
+        {hasSections ? (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            {/* Tab bar */}
+            <div className="border-b border-gray-200 bg-gray-50 flex overflow-x-auto">
+              {sections!.map((section) => {
+                const isActive = section.id === effectiveActiveId
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => onSectionChange?.(section.id)}
+                    className={
+                      isActive
+                        ? "border-b-2 border-[#FF5722] text-[#FF5722] bg-white flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap transition-all"
+                        : "border-b-2 border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-100 flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap transition-all"
+                    }
+                  >
+                    <span>{section.label}</span>
+                    <span
+                      className={
+                        isActive
+                          ? "ml-1 text-xs px-2 py-0.5 rounded-full bg-[#FF5722]/10 text-[#FF5722]"
+                          : "ml-1 text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
+                      }
+                    >
+                      {section.completedFields}/{section.totalFields}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Section content */}
+            <div className="p-6">
+              {activeSectionData && (
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-[#0A1628] mb-1">
+                    {activeSectionData.label}
+                  </h3>
+                  {activeSectionData.subtitle && (
+                    <p className="text-sm text-gray-500">{activeSectionData.subtitle}</p>
+                  )}
+                </div>
+              )}
+              {children}
+            </div>
+
+            {/* Bottom action bar */}
+            <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Left: completion hint */}
+              <div>
+                {completedFields >= totalFields && totalFields > 0 ? (
+                  <div className="flex items-center gap-2 text-green-600 font-semibold">
+                    <CheckCircle size={18} />
+                    <span>{getAllCompleteText()}</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-500">{getCompletionHint()}</span>
+                )}
+              </div>
+
+              {/* Right: next or submit */}
+              {isLastSection ? (
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={submitting || locked}
+                  className="bg-gradient-to-r from-[#FF5722] to-[#ff6e42] hover:from-[#ff6e42] hover:to-[#FF5722] text-white px-8 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Send size={16} />
+                  {getButtonLabel()}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!sections || !onSectionChange) return
+                    const currentIdx = sections.findIndex((s) => s.id === effectiveActiveId)
+                    const next = sections[currentIdx + 1]
+                    if (next) onSectionChange(next.id)
+                  }}
+                  className="px-6 py-3 rounded-lg font-semibold text-[#0A1628] bg-gray-200 hover:bg-gray-300 transition-all flex items-center gap-2"
+                >
+                  {getNextLabel()}
+                  <ChevronRight size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── Flat layout (no sections) — backward compatible ── */
+          <div className="space-y-6 mb-24">
+            {children}
+
+            {/* Sticky floating submit bar */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-lg">
+              <div className="max-w-6xl mx-auto px-6 py-4">
+                <div className="flex justify-end">
+                  <Button
+                    onClick={onSubmit}
+                    disabled={submitting || locked}
+                    size="lg"
+                    className="bg-gradient-to-r from-[#FF5722] to-[#ff6e42] hover:from-[#ff6e42] hover:to-[#FF5722] text-white min-w-32"
+                  >
+                    {getButtonLabel()}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <footer className="border-t border-[#1E2A38] bg-[#0E1B24] mt-16">
+        <div className="max-w-6xl mx-auto px-6 py-16">
+          <div className="grid gap-12 lg:grid-cols-3">
+
+            {/* Logo and tagline */}
+            <div className="lg:col-span-1">
+              <div className="mb-6 flex items-center gap-3">
+                <div className="relative h-8 w-8 flex-shrink-0">
+                  <img src="/covercap-logo-white.png" alt="CoverCap" className="h-8 w-auto object-contain" />
+                </div>
+                <span className="text-xl font-bold text-white tracking-wide">COVERCAP</span>
+              </div>
+              <p className="text-sm leading-relaxed text-[#7A8B9A]">
+                {langNorm.startsWith("en")
+                  ? "Insurance and risk infrastructure designed for companies operating in the digital economy."
+                  : langNorm.startsWith("es")
+                  ? "Seguros e infraestructura de riesgo diseñados para empresas que operan en la economía digital."
+                  : "Seguros e infraestrutura de risco projetados para empresas que operam na economia digital."}
+              </p>
+            </div>
+
+            {/* Locations */}
+            <div className="lg:col-span-1">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">
+                {langNorm.startsWith("en") ? "LOCATION" : langNorm.startsWith("es") ? "UBICACIÓN" : "LOCALIZAÇÃO"}
+              </h3>
+              <div className="space-y-3 text-sm text-[#94A3B8]">
+                <p className="font-medium text-white">Sede Principal: São Paulo, Brasil</p>
+                <div>
+                  <p className="mb-2 font-medium text-[#C5D0DB]">
+                    {langNorm.startsWith("en") ? "Local Offices:" : langNorm.startsWith("es") ? "Oficinas Locales:" : "Escritórios Locais:"}
+                  </p>
+                  <ul className="ml-4 space-y-1.5">
+                    <li className="flex items-start">
+                      <span className="mr-2 text-[#FF5722]">•</span>
+                      <span>Ciudad de México, México</span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="mr-2 text-[#FF5722]">•</span>
+                      <span>Bogotá, Colombia</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div className="lg:col-span-1">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">
+                {langNorm.startsWith("en") ? "CONTACT" : "CONTACTO"}
+              </h3>
+              <div className="flex items-center gap-3">
+                <a
+                  href="https://www.linkedin.com/company/covercap"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#1E2A38] text-white transition-all hover:bg-[#FF5722]"
+                  aria-label="LinkedIn"
+                >
+                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                  </svg>
+                </a>
+                <a
+                  href="mailto:ola@covercap.co"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#1E2A38] text-white transition-all hover:bg-[#FF5722]"
+                  aria-label="Email"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="my-10 h-px w-full bg-[#2A3847]" />
+
+          {/* Copyright */}
+          <div className="text-center">
+            <p className="text-sm text-[#7A8B9A]">{getFooter()}</p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
