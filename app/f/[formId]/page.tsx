@@ -99,6 +99,68 @@ function findSubmitterEmail(payload: Payload | null): string {
   return ""
 }
 
+/** ---------- Section i18n ---------- */
+const SECTION_I18N: Record<string, { en: string; es: string }> = {
+  "Informações Iniciais":           { en: "Initial Information",         es: "Información Inicial" },
+  "Estrutura Societária":           { en: "Corporate Structure",         es: "Estructura Societaria" },
+  "Compliance":                     { en: "Compliance",                  es: "Cumplimiento" },
+  "Operações":                      { en: "Operations",                  es: "Operaciones" },
+  "Anexos":                         { en: "Attachments",                 es: "Anexos" },
+  "D&O":                            { en: "D&O",                         es: "D&O" },
+  "Cyber":                          { en: "Cyber",                       es: "Cyber" },
+  "Claims":                         { en: "Claims",                      es: "Siniestros" },
+  "Dados básicos da empresa":       { en: "Company Basics",              es: "Datos Básicos" },
+  "Dados da Empresa":               { en: "Company Data",                es: "Datos de la Empresa" },
+  "Dados do Proponente":            { en: "Applicant Data",              es: "Datos del Proponente" },
+  "Informações da Empresa":         { en: "Company Information",         es: "Información de la Empresa" },
+  "Informações do Solicitante":     { en: "Applicant Information",       es: "Información del Solicitante" },
+  "Informações Adicionais":         { en: "Additional Information",      es: "Información Adicional" },
+  "Governança Corporativa":         { en: "Corporate Governance",        es: "Gobernanza Corporativa" },
+  "Proteção de Dados":              { en: "Data Protection",             es: "Protección de Datos" },
+  "Gestão de Riscos":               { en: "Risk Management",             es: "Gestión de Riesgos" },
+  "Gestão de riscos (RM)":          { en: "Risk Management (RM)",        es: "Gestión de Riesgos (RM)" },
+  "Clientes":                       { en: "Clients",                     es: "Clientes" },
+  "Fornecedores / Subcontratados":  { en: "Vendors / Subcontractors",    es: "Proveedores / Subcontratistas" },
+  "Recursos Humanos":               { en: "Human Resources",             es: "Recursos Humanos" },
+  "Departamento Legal":             { en: "Legal Department",            es: "Departamento Legal" },
+  "Coberturas e Sinistros":         { en: "Coverage & Claims",           es: "Coberturas y Siniestros" },
+  "Receitas e Empregados":          { en: "Revenue & Employees",         es: "Ingresos y Empleados" },
+  "Continuidade do Negócio":        { en: "Business Continuity",         es: "Continuidad del Negocio" },
+  "Auditoria":                      { en: "Audit",                       es: "Auditoría" },
+  "Segurança de dados e continuidade de negócio (DS/BC)": { en: "Data Security & Business Continuity (DS/BC)", es: "Seguridad de Datos y Continuidad (DS/BC)" },
+  "Segurança em identidade, credenciais e acesso (ICA)":  { en: "Identity, Credentials & Access (ICA)",       es: "Identidad, Credenciales y Acceso (ICA)" },
+  "Monitorização de segurança e resposta a incidentes (SMIR)": { en: "Security Monitoring & Incident Response (SMIR)", es: "Monitoreo de Seguridad e Incidentes (SMIR)" },
+  "Defesa ante malware (Mal)":      { en: "Malware Defense (Mal)",       es: "Defensa ante Malware (Mal)" },
+  "Defesa ante phishing (PhD)":     { en: "Phishing Defense (PhD)",      es: "Defensa ante Phishing (PhD)" },
+  "Defesa de Internet e perímetro": { en: "Internet & Perimeter Defense",es: "Defensa de Internet y Perímetro" },
+  "Defesa de terceiros e MSP (TP & MSP)": { en: "Third-Party & MSP Defense (TP & MSP)", es: "Defensa de Terceros y MSP (TP & MSP)" },
+  "Acesso e Recuperação de Dados":  { en: "Data Access & Recovery",      es: "Acceso y Recuperación de Datos" },
+  "Aplicações de Internet":         { en: "Internet Applications",       es: "Aplicaciones de Internet" },
+  "Atividade e Estabelecimentos":   { en: "Activity & Establishments",   es: "Actividad y Establecimientos" },
+  "Atividades profissionais e detalhamento de receitas": { en: "Professional Activities & Revenue Details", es: "Actividades Profesionales y Detalle de Ingresos" },
+  "Transferência de fundos e remessas": { en: "Fund Transfers & Remittances", es: "Transferencias de Fondos y Remesas" },
+  "Experiência do risco":           { en: "Risk Experience",             es: "Experiencia del Riesgo" },
+  "Controle do produto":            { en: "Product Control",             es: "Control del Producto" },
+  "Produtos":                       { en: "Products",                    es: "Productos" },
+  "Produtos ou Componentes não fabricados pela empresa": { en: "Products/Components Not Manufactured", es: "Productos/Componentes No Fabricados" },
+  "Informações sobre perdas":       { en: "Loss Information",            es: "Información sobre Pérdidas" },
+  "Informações sobre Perdas":       { en: "Loss Information",            es: "Información sobre Pérdidas" },
+  "Valores em risco":               { en: "Values at Risk",              es: "Valores en Riesgo" },
+  "Produção suspensa e/ou prevista":{ en: "Suspended/Planned Production",es: "Producción Suspendida/Prevista" },
+  "Sistemas computadorizados":      { en: "Computerized Systems",        es: "Sistemas Computarizados" },
+  "Limite / Importância Segurada":  { en: "Limit / Insured Amount",      es: "Límite / Suma Asegurada" },
+  "Geral":                          { en: "General",                     es: "General" },
+}
+
+function translateSection(name: string, lang: string): string {
+  const low = lang.toLowerCase()
+  const entry = SECTION_I18N[name]
+  if (!entry) return name
+  if (low.startsWith("en")) return entry.en
+  if (low.startsWith("es")) return entry.es
+  return name
+}
+
 /** ---------- Page ---------- */
 export default function FormPage({
   params,
@@ -121,8 +183,8 @@ export default function FormPage({
   const [activeSection, setActiveSection] = useState<string>("")
   const { saveDebounced } = useDebouncedSaves()
   const sections = useMemo(
-    () => (payload ? buildSections(payload.questions) : []),
-    [payload]
+    () => (payload ? buildSections(payload.questions, lang) : []),
+    [payload, lang]
   )
 
   // -------- LOAD --------
@@ -280,12 +342,12 @@ export default function FormPage({
   }
 
   /** Build section tabs from question data */
-  function buildSections(questions: Question[]) {
+  function buildSections(questions: Question[], currentLang: string) {
     const sectionMap = new Map<string, { label: string; questions: Question[] }>()
     for (const q of questions) {
       const sectionName = q.section || "Geral"
       if (!sectionMap.has(sectionName)) {
-        sectionMap.set(sectionName, { label: sectionName, questions: [] })
+        sectionMap.set(sectionName, { label: translateSection(sectionName, currentLang), questions: [] })
       }
       sectionMap.get(sectionName)!.questions.push(q)
     }
