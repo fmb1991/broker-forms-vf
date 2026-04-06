@@ -17,9 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Forters - Proteção Financeira Global",
-  description:
-    "Soluções especializadas em linhas financeiras para empresas latino-americanas",
+  title: "CoverCap - Proteção Financeira Global",
+  description: "Questionários de seguros digitais para empresas",
 }
 
 export default function RootLayout({

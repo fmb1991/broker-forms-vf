@@ -82,8 +82,8 @@ export default function AdminPage() {
           <div className="container mx-auto px-4 py-6 max-w-4xl">
             <div className="flex justify-center">
               <Image
-                src="/forters-logo.jpeg"
-                alt="Forters"
+                src="/covercap-logo.png"
+                alt="CoverCap"
                 width={200}
                 height={80}
                 className="h-16 w-auto"
@@ -124,7 +124,7 @@ export default function AdminPage() {
                 <Button
                   onClick={handleLogin}
                   disabled={!adminSecret}
-                  className="bg-teal-600 hover:bg-teal-700 text-white"
+                  className="bg-[#FF5722] hover:bg-[#ff6e42] text-white"
                 >
                   Entrar
                 </Button>
@@ -144,8 +144,8 @@ export default function AdminPage() {
           <div className="container mx-auto px-4 py-6 max-w-4xl">
             <div className="flex justify-between items-center">
               <Image
-                src="/forters-logo.jpeg"
-                alt="Forters"
+                src="/covercap-logo.png"
+                alt="CoverCap"
                 width={160}
                 height={64}
                 className="h-12 w-auto"
@@ -426,8 +426,8 @@ function TemplatesModule({
         <div className="container mx-auto px-4 py-6 max-w-4xl">
           <div className="flex justify-between items-center">
             <Image
-              src="/forters-logo.jpeg"
-              alt="Forters"
+              src="/covercap-logo.png"
+              alt="CoverCap"
               width={160}
               height={64}
               className="h-12 w-auto"
@@ -502,7 +502,7 @@ function TemplatesModule({
                 <Button
                   onClick={loadTemplates}
                   disabled={!adminSecret}
-                  className="bg-teal-600 hover:bg-teal-700 text-white"
+                  className="bg-[#FF5722] hover:bg-[#ff6e42] text-white"
                 >
                   Carregar Templates
                 </Button>
@@ -876,8 +876,8 @@ function FormsModule({
         <div className="container mx-auto px-4 py-6 max-w-4xl">
           <div className="flex justify-between items-center">
             <Image
-              src="/forters-logo.jpeg"
-              alt="Forters"
+              src="/covercap-logo.png"
+              alt="CoverCap"
               width={160}
               height={64}
               className="h-12 w-auto"

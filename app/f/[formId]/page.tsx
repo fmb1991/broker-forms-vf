@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "../../../lib/supabaseClient"
 import { FormShell } from "../../../components/forms/FormShell"
@@ -33,6 +33,8 @@ type Question = {
     | "table"
   label: string
   help?: string
+  section?: string
+  required?: boolean
   config?: {
     currency?: string
     decimals?: number
@@ -116,7 +118,12 @@ export default function FormPage({
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<string>("")
   const { saveDebounced } = useDebouncedSaves()
+  const sections = useMemo(
+    () => (payload ? buildSections(payload.questions) : []),
+    [payload]
+  )
 
   // -------- LOAD --------
   useEffect(() => {
@@ -272,6 +279,40 @@ export default function FormPage({
     saveDebounced(code, value, saveAnswer) // save after pause
   }
 
+  /** Build section tabs from question data */
+  function buildSections(questions: Question[]) {
+    const sectionMap = new Map<string, { label: string; questions: Question[] }>()
+    for (const q of questions) {
+      const sectionName = q.section || "Geral"
+      if (!sectionMap.has(sectionName)) {
+        sectionMap.set(sectionName, { label: sectionName, questions: [] })
+      }
+      sectionMap.get(sectionName)!.questions.push(q)
+    }
+    return Array.from(sectionMap.entries()).map(([key, val]) => ({
+      id: key.toLowerCase().replace(/\s+/g, "-"),
+      label: val.label,
+      subtitle: "",
+      totalFields: val.questions.length,
+      completedFields: val.questions.filter((q) => {
+        const ans = q.answer
+        return (
+          ans !== null &&
+          ans !== undefined &&
+          ans !== "" &&
+          !(Array.isArray(ans) && ans.length === 0)
+        )
+      }).length,
+    }))
+  }
+
+  /** Reload page with updated lang param */
+  function handleLanguageChange(newLang: string) {
+    const url = new URL(window.location.href)
+    url.searchParams.set("lang", newLang)
+    window.location.href = url.toString()
+  }
+
   // -------- OUTLET --------
   if (loading) return <div className="p-6">Carregando…</div>
   if (error) return <div className="p-6 text-red-600">Erro: {error}</div>
@@ -279,15 +320,40 @@ export default function FormPage({
 
   const locked = payload.form.status === "submitted"
 
+  const effectiveSection = activeSection || sections[0]?.id || ""
+  const visibleQuestions = effectiveSection
+    ? payload.questions.filter((q) => {
+        const sectionName = q.section || "Geral"
+        return sectionName.toLowerCase().replace(/\s+/g, "-") === effectiveSection
+      })
+    : payload.questions
+
+  const totalFields = payload.questions.length
+  const completedFields = payload.questions.filter((q) => {
+    const ans = q.answer
+    return (
+      ans !== null &&
+      ans !== undefined &&
+      ans !== "" &&
+      !(Array.isArray(ans) && ans.length === 0)
+    )
+  }).length
+
   return (
     <FormShell
       company={payload.form.company}
       status={payload.form.status}
       onSubmit={submitForm}
       submitting={submitting}
-      lang={lang} // <<< IMPORTANT: pass lang down
+      lang={lang}
+      sections={sections}
+      activeSection={effectiveSection}
+      onSectionChange={(id) => setActiveSection(id)}
+      totalFields={totalFields}
+      completedFields={completedFields}
+      onLanguageChange={handleLanguageChange}
     >
-      {payload.questions.map((question, index) => (
+      {visibleQuestions.map((question, index) => (
         <QuestionRenderer
           key={question.code}
           question={question}

@@ -20,8 +20,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  /* Brand (Forters teal/blue) */
-  --primary: oklch(0.45 0.15 200);
+  /* Brand (CoverCap orange/navy) */
+  --primary: #FF5722;
   --primary-foreground: oklch(0.985 0 0);
 
   --secondary: oklch(0.95 0.02 200);
@@ -40,11 +40,10 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
 
-  /* Forters custom accents */
-  --forters-orange: oklch(0.7 0.15 45);
-  --forters-navy: oklch(0.2 0.05 240);
-  --forters-teal: oklch(0.45 0.15 200);
-  --forters-light-blue: oklch(0.92 0.05 200);
+  /* CoverCap custom accents */
+  --covercap-orange: #FF5722;
+  --covercap-navy: #0A1628;
+  --covercap-orange-end: #ff6e42;
 
   /* Chart colors (optional) */
   --chart-1: oklch(0.646 0.222 41.116);
@@ -146,11 +145,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Forters custom colors */
-  --color-forters-orange: var(--forters-orange);
-  --color-forters-navy: var(--forters-navy);
-  --color-forters-teal: var(--forters-teal);
-  --color-forters-light-blue: var(--forters-light-blue);
+  /* CoverCap custom colors */
+  --color-covercap-orange: var(--covercap-orange);
+  --color-covercap-navy: var(--covercap-navy);
+  --color-covercap-orange-end: var(--covercap-orange-end);
 
   /* Chart palette */
   --color-chart-1: var(--chart-1);
