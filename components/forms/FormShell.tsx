@@ -148,7 +148,7 @@ export function FormShell({
   const langButtons = [
     { label: "PT", code: "pt-BR", active: langNorm.startsWith("pt") },
     { label: "EN", code: "en", active: langNorm.startsWith("en") },
-    { label: "ES", code: "es-419", active: langNorm.startsWith("es") },
+    { label: "ES", code: "es", active: langNorm.startsWith("es") },
   ]
 
   return (
@@ -158,9 +158,9 @@ export function FormShell({
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
           {/* Logo */}
           <img
-            src="/covercap-logo-white.png"
+            src="/covercap-logo.png"
             alt="CoverCap"
-            className="h-8 w-auto"
+            className="h-10 w-auto"
           />
 
           <div className="flex items-center gap-4">
