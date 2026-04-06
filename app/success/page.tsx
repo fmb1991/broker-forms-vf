@@ -87,13 +87,13 @@ export default function SuccessPage({
   const t = TEXT[lang];
 
   return (
-    <div className="min-h-screen bg-[#172534] text-white">
+    <div className="min-h-screen bg-[#0A1628] text-white">
       {/* Header */}
       <header className="bg-white w-full">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-center">
           <Image
-            src="/forters-logo.jpeg"
-            alt="Forters"
+            src="/covercap-logo-white.png"
+            alt="CoverCap"
             width={180}
             height={70}
             className="h-14"
@@ -185,8 +185,7 @@ export default function SuccessPage({
         </footer>
       </main>
 
-      <FooterForters />
+      <FooterForters lang={lang} />
     </div>
   );
 }
-
