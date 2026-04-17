@@ -239,9 +239,14 @@ const attachments: { filename: string }[] = (filesDb || []).map((f) => ({
         const val = answerMap.get(q.id);
 
         switch (q.type) {
-          case "boolean":
-            answerStr = fmtBoolean(val);
+          case "boolean": {
+            const vv = normalize(val);
+            const b = typeof vv === "boolean" ? vv : vv?.value ?? vv?.val;
+            const boolStr = b === true ? "Sim" : b === false ? "Não" : "-";
+            const details = typeof vv === "object" && vv !== null ? (vv?.details ?? "") : "";
+            answerStr = details ? `${boolStr}\nComentários: ${details}` : boolStr;
             break;
+          }
 
           case "one_choice":
           case "oneChoice":
